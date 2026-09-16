@@ -1,0 +1,24 @@
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./dev/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+
+  mesh-passes:
+    build: ./mesh_passes
+    depends_on:
+      - mosquitto
+    environment:
+      MQTT_HOST: mosquitto
+      WEB_PASSWORD: dev
+      DATA_DIR: /data
+      LOG_LEVEL: debug
+      ACTIVE_FROM: "00:00"
+      ACTIVE_TO: "23:59"
+      ACTIVE_DAYS: mon,tue,wed,thu,fri,sat,sun
+    ports:
+      - "8099:8099"
+    volumes:
+      - ./dev/data:/data
