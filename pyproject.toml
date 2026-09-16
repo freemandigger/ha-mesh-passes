@@ -28,6 +28,7 @@ testpaths = ["tests"]
 line-length = 120
 target-version = "py312"
 src = ["mesh_passes", "tests"]
+extend-exclude = ["docs"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
