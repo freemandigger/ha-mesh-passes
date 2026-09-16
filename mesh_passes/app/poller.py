@@ -66,10 +66,16 @@ class Poller:
         delay: float = 0
         while True:
             forced = await self._sleep(delay)
-            if forced or in_window(self._clock(), self._settings):
-                delay = await self.poll_once()
-            else:
-                await self._set_status("outside_hours")
+            try:
+                if forced or in_window(self._clock(), self._settings):
+                    delay = await self.poll_once()
+                else:
+                    await self._set_status("outside_hours")
+                    delay = self._interval
+            except Exception as err:
+                self.status = "api_error"
+                _LOGGER.error("Непредвиденная ошибка цикла опроса: %s", type(err).__name__)
+                _LOGGER.debug("Подробности ошибки цикла опроса", exc_info=True)
                 delay = self._interval
 
     async def poll_once(self) -> float:

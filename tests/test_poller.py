@@ -34,6 +34,18 @@ class FakePublisher:
         return [call for call in self.calls if call[0] == kind]
 
 
+class FlakyPublisher(FakePublisher):
+    def __init__(self):
+        super().__init__()
+        self._fail_next_account = True
+
+    async def publish_account(self, profile_id, status, last_poll, token_expires):
+        if self._fail_next_account:
+            self._fail_next_account = False
+            raise RuntimeError("broker gone")
+        await super().publish_account(profile_id, status, last_poll, token_expires)
+
+
 class Clock:
     def __init__(self, hours, minutes):
         self.set(hours, minutes)
@@ -185,6 +197,26 @@ async def test_run_waits_outside_window_and_polls_on_request(fake_mos, make_poll
 
         await wait_for(lambda: publisher.of("state"))
         assert poller.status == "ok"
+    finally:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+
+async def test_run_survives_unexpected_publisher_error(fake_mos, logged_in_auth, api_http, tmp_path, clock):
+    fake_mos.visits["guid-101"] = day("08:07", "14:33")
+    publisher = FlakyPublisher()
+    poller = Poller(
+        logged_in_auth, MeshClient(api_http, fake_mos.base_url), publisher, SETTINGS, tmp_path / "state.json", clock
+    )
+    task = asyncio.create_task(poller.run())
+    try:
+        await wait_for(lambda: poller.status == "api_error")
+        assert not task.done()
+
+        poller.request_poll()
+
+        await wait_for(lambda: poller.status == "ok")
     finally:
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
