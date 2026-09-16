@@ -98,7 +98,7 @@
 repository.yaml                    # репозиторий аддонов HA
 mesh_passes/
   config.yaml                      # опции, ingress, services: mqtt:need, arch: aarch64, amd64
-  Dockerfile                       # base-python
+  Dockerfile                       # python:3.12-slim
   DOCS.md
   CHANGELOG.md
   translations/ru.yaml, en.yaml
@@ -259,10 +259,10 @@ Device-based discovery: одно retained-сообщение на устройс
 
 ### 7.4. Доступность и жизненный цикл
 
-- LWT `mesh_passes/<account_id>/availability`: `online` / `offline`, retained; все компоненты ссылаются на него.
+- LWT `mesh_passes/availability` — общий для экземпляра аддона, потому что LWT задаётся при подключении к брокеру, когда профиль может быть ещё неизвестен: `online` / `offline`, retained; все компоненты ссылаются на него.
 - При `homeassistant/status = online` аддон заново публикует discovery и состояния.
 - Выход из учётной записи: устройства и состояния остаются, статус `auth_required`.
-- Ребёнок исчез из профиля: пустое retained-сообщение в его discovery-топик и топик состояния.
+- Ребёнок исчез из профиля: пустое retained-сообщение в его discovery-топик и топик состояния. Работает, пока аддон запущен; если ребёнок пропал, пока аддон был выключен, устройство удаляется вручную в HA (описано в DOCS.md).
 - До первого входа `account_id` неизвестен — discovery не публикуется.
 
 ## 8. Уведомления
@@ -271,7 +271,7 @@ Device-based discovery: одно retained-сообщение на устройс
 
 - **Входы:** `pass_event` (entity, domain `event`); `event_types` (select multiple `entry`/`exit`, по умолчанию `exit`); `actions` (selector `action`).
 - **Триггер:** изменение состояния `pass_event`.
-- **Условия:** `trigger.from_state.state` не `unavailable`/`unknown`; `trigger.to_state.attributes.event_type` в `event_types`; состояние сущности (момент получения события HA) не старше 1 минуты. Последнее отсекает восстановление старого состояния после перезапуска аддона, но не отбрасывает проходы, опубликованные с задержкой после ошибок API (их возраст уже ограничил аддон через `max_event_age`).
+- **Условия:** `trigger.from_state` существует; `trigger.to_state.state` не `unavailable`/`unknown`; `trigger.to_state.attributes.event_type` в `event_types`; состояние сущности (момент получения события HA) не старше 1 минуты. Проверка свежести отсекает восстановление старого состояния после перезапуска аддона или HA, но не теряет первое событие после установки (переход из `unknown`) и проходы, опубликованные с задержкой после ошибок API (их возраст уже ограничил аддон через `max_event_age`).
 - **Переменные для действий:** `child`, `direction` (`event_type`), `time` (`HH:MM`, из атрибута `time`), `school`, `person`.
 - **Текст-пример в описании:** `🏫 {{ child }}: выход из школы в {{ time }}`.
 - **Режим:** `queued`.
@@ -346,7 +346,7 @@ pytest + pytest-asyncio, HTTP подменяется (`aioresponses`), врем�
 ### 11.3. CI
 
 - `ci.yaml` (PR, push в `main`): линт, тесты, линтер аддона.
-- `release.yaml` (тег `vX.Y.Z`): `home-assistant/builder` → образы `ghcr.io/freemandigger/mesh-passes-{aarch64,amd64}:X.Y.Z`; `config.yaml` указывает `image: ghcr.io/freemandigger/mesh-passes-{arch}`, версия в `config.yaml` совпадает с тегом.
+- `release.yaml` (тег `vX.Y.Z`): `docker/build-push-action` (QEMU + buildx, по одному job на архитектуру) → образы `ghcr.io/freemandigger/mesh-passes-{aarch64,amd64}:X.Y.Z` и `:latest` с метками `io.hass.*`; `config.yaml` указывает `image: ghcr.io/freemandigger/mesh-passes-{arch}`, версия в `config.yaml` совпадает с тегом.
 
 ### 11.4. Публикация
 
