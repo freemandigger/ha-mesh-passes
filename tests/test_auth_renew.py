@@ -3,6 +3,7 @@ import time
 import pytest
 
 from app.auth import LoginState, NotLoggedIn
+from app.mesh import MeshApiError
 from helpers import wait_for
 
 
@@ -46,6 +47,21 @@ async def test_no_renewal_path_requires_login(fake_mos, logged_in_auth):
     assert "войдите заново" in logged_in_auth.error
     with pytest.raises(NotLoggedIn):
         await logged_in_auth.token()
+
+
+@pytest.mark.parametrize("outage", ["http_503", "connection_refused"])
+async def test_unreachable_mos_ru_keeps_session(fake_mos, logged_in_auth, monkeypatch, outage):
+    if outage == "http_503":
+        fake_mos.renewal_status = 503
+    else:
+        monkeypatch.setattr(logged_in_auth, "_login", "http://127.0.0.1:9")
+        monkeypatch.setattr(logged_in_auth, "_school", "http://127.0.0.1:9")
+
+    with pytest.raises(MeshApiError, match="mos.ru недоступен"):
+        await logged_in_auth.renew()
+
+    assert logged_in_auth.state is LoginState.LOGGED_IN
+    assert logged_in_auth.error is None
 
 
 async def test_refresh_children(fake_mos, logged_in_auth):
@@ -95,3 +111,13 @@ async def test_keepalive_failure_keeps_valid_session(fake_mos, logged_in_auth):
     requests_before = len(fake_mos.requests)
     await logged_in_auth.keepalive()
     assert len(fake_mos.requests) == requests_before
+
+
+async def test_keepalive_tolerates_unreachable_mos_ru(fake_mos, logged_in_auth):
+    logged_in_auth.logged_in_at = time.time() - 3700
+    fake_mos.renewal_status = 503
+
+    await logged_in_auth.keepalive()
+
+    assert logged_in_auth.state is LoginState.LOGGED_IN
+    assert logged_in_auth.last_renewal is None

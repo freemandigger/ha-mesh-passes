@@ -15,7 +15,7 @@ from pathlib import Path
 import aiohttp
 import segno
 
-from app.mesh import Child, MeshClient, MeshError
+from app.mesh import Child, MeshApiError, MeshClient, MeshError
 from app.session_store import SessionData, cookie_value, load_session, save_session, set_cookie
 from app.tokens import jwt_exp
 
@@ -36,6 +36,12 @@ class LoginState(enum.StrEnum):
     SMS = "sms"
     LOGGED_IN = "logged_in"
     AUTH_REQUIRED = "auth_required"
+
+
+class Renewal(enum.Enum):
+    DONE = "done"
+    REJECTED = "rejected"
+    UNREACHABLE = "unreachable"
 
 
 class NotLoggedIn(Exception):
@@ -128,11 +134,17 @@ class Auth:
         if self.state is not LoginState.LOGGED_IN:
             raise NotLoggedIn
         old = cookie_value(self._jar, "aupd_token")
-        if await self._renew_sso(old) or await self._renew_refresh(old):
-            self.last_renewal = self._clock()
-            self._save()
-            _LOGGER.info("Токен МЭШ продлён")
-            return cookie_value(self._jar, "aupd_token")
+        unreachable = False
+        for step in (self._renew_sso, self._renew_refresh):
+            result = await step(old)
+            if result is Renewal.DONE:
+                self.last_renewal = self._clock()
+                self._save()
+                _LOGGER.info("Токен МЭШ продлён")
+                return cookie_value(self._jar, "aupd_token")
+            unreachable = unreachable or result is Renewal.UNREACHABLE
+        if unreachable:
+            raise MeshApiError("mos.ru недоступен при продлении сессии")
         self.mark_expired()
         raise NotLoggedIn
 
@@ -150,7 +162,7 @@ class Auth:
         if now - last < KEEPALIVE_EVERY:
             return
         self._last_keepalive_attempt = now
-        if await self._renew_sso(cookie_value(self._jar, "aupd_token")):
+        if await self._renew_sso(cookie_value(self._jar, "aupd_token")) is Renewal.DONE:
             self.last_renewal = now
             self._save()
             _LOGGER.info("Сессия mos.ru продлена")
@@ -163,29 +175,33 @@ class Auth:
         self._save()
         return self.children
 
-    async def _renew_sso(self, old: str | None) -> bool:
+    async def _renew_sso(self, old: str | None) -> Renewal:
         params = ae_params(script=False, school_url=self._school)
         try:
             async with self._http.get(f"{self._login}/sps/oauth/ae", params=params) as response:
                 await response.read()
         except (aiohttp.ClientError, TimeoutError):
-            return False
+            return Renewal.UNREACHABLE
         new = cookie_value(self._jar, "aupd_token")
-        return new is not None and new != old
+        if new is not None and new != old:
+            return Renewal.DONE
+        return Renewal.UNREACHABLE if response.status >= 500 else Renewal.REJECTED
 
-    async def _renew_refresh(self, old: str | None) -> bool:
+    async def _renew_refresh(self, old: str | None) -> Renewal:
         url = f"{self._school}/v2/token/refresh"
         try:
             async with self._http.get(url, params={"roleId": "2", "subsystem": "2"}, allow_redirects=False) as response:
                 body = (await response.text()).strip().strip('"')
-                ok = response.status in (200, 201)
         except (aiohttp.ClientError, TimeoutError):
-            return False
+            return Renewal.UNREACHABLE
+        if response.status >= 500:
+            return Renewal.UNREACHABLE
         new_exp, old_exp = jwt_exp(body), jwt_exp(old or "")
+        ok = response.status in (200, 201)
         if not ok or new_exp is None or body == old or (old_exp is not None and new_exp <= old_exp):
-            return False
+            return Renewal.REJECTED
         set_cookie(self._jar, "aupd_token", body, self._school)
-        return True
+        return Renewal.DONE
 
     async def start_login(self) -> None:
         async with self._login_lock:

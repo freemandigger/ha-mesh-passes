@@ -185,6 +185,22 @@ async def test_unrecoverable_auth_requires_login(fake_mos, make_poller, logged_i
     assert publisher.of("account")[-1] == ("account", "auth_required")
 
 
+async def test_unreachable_renewal_is_api_error(fake_mos, make_poller, logged_in_auth, publisher):
+    fake_mos.visits["guid-101"] = day("08:07", "14:33")
+    fake_mos.revoked.add(await logged_in_auth.token())
+    fake_mos.renewal_status = 503
+    poller = make_poller()
+
+    assert await poller.poll_once() == 180
+
+    assert poller.status == "api_error"
+    assert logged_in_auth.state is LoginState.LOGGED_IN
+    assert publisher.of("account")[-1] == ("account", "api_error")
+    fake_mos.renewal_status = 200
+    await poller.poll_once()
+    assert poller.status == "ok"
+
+
 async def test_run_waits_outside_window_and_polls_on_request(fake_mos, make_poller, publisher, clock):
     fake_mos.visits["guid-101"] = day("08:07", "14:33")
     clock.set(22, 0)

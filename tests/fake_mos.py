@@ -38,6 +38,7 @@ class FakeMos:
     sms_code: str = "123456"
     sso_alive: bool = True
     refresh_works: bool = False
+    renewal_status: int = 200
     token_ttl: float = 24 * 3600
     profile_id: int = 777
     children: list[dict] = field(default_factory=default_children)
@@ -93,6 +94,8 @@ class FakeMos:
                 {"inquire": "show_qr_code", "link": f"{self.base_url}/qr/{len(self.requests)}", "expires": 180},
             ]
             return web.json_response({"items": items})
+        if self.renewal_status != 200:
+            return web.Response(status=self.renewal_status)
         if self.sso_alive and "Ltpatoken2" in request.cookies:
             raise web.HTTPFound("/v3/auth/sudir/callback?code=silent")
         raise web.HTTPSeeOther("/sps/login/methods/password")
@@ -144,6 +147,8 @@ class FakeMos:
         return response
 
     async def _token_refresh(self, request: web.Request) -> web.Response:
+        if self.renewal_status != 200:
+            return web.Response(status=self.renewal_status)
         current = request.cookies.get("aupd_token")
         if not current or "aupd_refresh_token" not in request.cookies:
             raise web.HTTPForbidden()
