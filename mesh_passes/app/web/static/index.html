@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>МЭШ: проходы</title>
+<style>
+  :root { color-scheme: light dark; --bg: #fafafa; --fg: #1c1c1c; --muted: #6b6b6b; --card: #fff; --line: #e3e3e3; --accent: #0288d1; --bad: #c62828; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #111; --fg: #e6e6e6; --muted: #9a9a9a; --card: #1c1c1c; --line: #2c2c2c; --accent: #4fc3f7; --bad: #ef9a9a; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 16px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+  h1 { font-size: 20px; margin: 4px 0 16px; }
+  h2 { font-size: 16px; margin: 0 0 8px; }
+  .muted { color: var(--muted); }
+  .error { color: var(--bad); }
+  .qr { background: #fff; padding: 12px; border-radius: 8px; display: inline-block; }
+  .qr svg { width: 260px; height: 260px; display: block; }
+  button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--accent); color: #fff; cursor: pointer; margin: 4px 4px 4px 0; }
+  button.secondary { background: transparent; color: var(--fg); }
+  button:disabled { opacity: .5; cursor: default; }
+  input { font: inherit; font-size: 22px; letter-spacing: 4px; width: 9ch; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 4px 0; border-top: 1px solid var(--line); }
+  td:first-child { color: var(--muted); width: 45%; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>МЭШ: проходы</h1>
+  <section id="login" hidden>
+    <h2>Вход в mos.ru</h2>
+    <p id="login-text" class="muted"></p>
+    <div id="qr" class="qr" hidden></div>
+    <form id="sms" hidden>
+      <input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="8" required>
+      <button type="submit">Отправить</button>
+      <button type="button" id="resend" class="secondary">Отправить SMS ещё раз</button>
+      <p id="sms-info" class="muted"></p>
+    </form>
+    <button id="start" hidden>Войти через QR-код</button>
+  </section>
+  <p id="error" class="error" hidden></p>
+  <section id="children" hidden></section>
+  <section id="session" hidden>
+    <h2>Сессия</h2>
+    <table>
+      <tr><td>Статус</td><td id="status"></td></tr>
+      <tr><td>Последний успешный опрос</td><td id="last-poll"></td></tr>
+      <tr><td>Токен действует до</td><td id="token-expires"></td></tr>
+      <tr><td>Последнее продление</td><td id="last-renewal"></td></tr>
+    </table>
+    <p>
+      <button id="poll">Проверить сейчас</button>
+      <button id="logout" class="secondary">Выйти</button>
+    </p>
+  </section>
+</main>
+<script src="app.js"></script>
+</body>
+</html>
