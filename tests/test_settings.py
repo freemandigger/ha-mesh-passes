@@ -74,3 +74,25 @@ def test_docker_requires_web_password():
 def test_invalid_options(options, message):
     with pytest.raises(SettingsError, match=message):
         build_settings(options, ADDON_ENV, MQTT)
+
+
+def test_docker_web_port_from_environment():
+    env = {"WEB_PASSWORD": "pw", "WEB_PORT": "9000"}
+    settings = build_settings({}, env, None)
+    assert settings.web_port == 9000
+
+
+def test_docker_web_port_invalid():
+    env = {"WEB_PASSWORD": "pw", "WEB_PORT": "0"}
+    with pytest.raises(SettingsError, match="WEB_PORT"):
+        build_settings({}, env, None)
+
+
+def test_addon_discovery_prefix_normalization():
+    settings = build_settings({"discovery_prefix": "homeassistant/"}, ADDON_ENV, MQTT)
+    assert settings.discovery_prefix == "homeassistant"
+
+
+def test_addon_discovery_prefix_slash_only():
+    settings = build_settings({"discovery_prefix": "/"}, ADDON_ENV, MQTT)
+    assert settings.discovery_prefix == "homeassistant"
