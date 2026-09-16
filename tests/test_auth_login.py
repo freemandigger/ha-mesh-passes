@@ -124,10 +124,10 @@ async def test_login_completes_when_session_cannot_be_saved(fake_mos, auth, monk
     logins = []
     auth.on_login = lambda: logins.append(True)
 
-    def _raise_disk_full():
+    def _raise_disk_full(*args, **kwargs):
         raise OSError("disk full")
 
-    monkeypatch.setattr(auth, "_save", _raise_disk_full)
+    monkeypatch.setattr("app.auth.save_session", _raise_disk_full)
 
     await auth.start_login()
 

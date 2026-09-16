@@ -52,3 +52,15 @@ async def test_refresh_children(fake_mos, logged_in_auth):
     children = await logged_in_auth.refresh_children()
 
     assert [child.id for child in children] == [101, 102]
+
+
+async def test_renewal_survives_session_save_failure(fake_mos, logged_in_auth, monkeypatch):
+    def _raise_disk_full(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr("app.auth.save_session", _raise_disk_full)
+
+    token = await logged_in_auth.renew()
+
+    assert token == fake_mos.issued_tokens[-1]
+    assert logged_in_auth.state is LoginState.LOGGED_IN

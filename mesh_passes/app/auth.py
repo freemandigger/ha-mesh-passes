@@ -335,10 +335,7 @@ class Auth:
         self.error = None
         self.sms = None
         self.qr_svg = None
-        try:
-            self._save()
-        except OSError as err:
-            _LOGGER.warning("Не удалось сохранить сессию mos.ru: %s", type(err).__name__)
+        self._save()
         _LOGGER.info("Вход выполнен, детей в профиле: %d", len(self.children))
         if self.on_login:
             self.on_login()
@@ -360,7 +357,10 @@ class Auth:
         self.state = LoginState.AUTH_REQUIRED if self.profile_id else LoginState.LOGGED_OUT
 
     def _save(self) -> None:
-        save_session(self._path, self._jar, SessionData(self.profile_id, self.children, self.logged_in_at))
+        try:
+            save_session(self._path, self._jar, SessionData(self.profile_id, self.children, self.logged_in_at))
+        except OSError as err:
+            _LOGGER.warning("Не удалось сохранить сессию mos.ru: %s", type(err).__name__)
 
     async def _cancel_task(self) -> None:
         if self._task and not self._task.done():
