@@ -2,6 +2,7 @@ import json
 from http.cookies import SimpleCookie
 
 import aiohttp
+import pytest
 from yarl import URL
 
 from app.mesh import Child
@@ -54,6 +55,26 @@ async def test_broken_cookie_entry_leaves_jar_untouched(tmp_path):
         "children": [],
         "logged_in_at": None,
     }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    jar = aiohttp.CookieJar()
+    assert load_session(path, jar) is None
+    assert list(jar) == []
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"name": "bad", "value": "v2", "domain": "[", "path": "/", "expires": ""},
+        {"name": "bad name", "value": "v2", "domain": "mos.ru", "path": "/", "expires": ""},
+        {"name": "bad", "value": "v2", "domain": "mos.ru", "path": "/", "expires": 12345},
+    ],
+    ids=["invalid_domain", "illegal_name", "non_string_expires"],
+)
+async def test_unrestorable_cookie_leaves_jar_untouched(tmp_path, bad):
+    path = tmp_path / "session.json"
+    good = {"name": "good", "value": "v1", "domain": "mos.ru", "path": "/", "expires": ""}
+    payload = {"cookies": [good, bad], "profile_id": 777, "children": [], "logged_in_at": None}
     path.write_text(json.dumps(payload), encoding="utf-8")
 
     jar = aiohttp.CookieJar()

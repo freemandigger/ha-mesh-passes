@@ -1,7 +1,7 @@
 import json
 import os
 from dataclasses import asdict, dataclass
-from http.cookies import SimpleCookie
+from http.cookies import CookieError, SimpleCookie
 from pathlib import Path
 
 import aiohttp
@@ -66,10 +66,13 @@ def load_session(path: Path, jar: aiohttp.CookieJar) -> SessionData | None:
             [Child(**child) for child in raw.get("children", [])],
             raw.get("logged_in_at"),
         )
-    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        staging = aiohttp.CookieJar(unsafe=True)
+        for cookie in cookies:
+            _add_cookie(staging, *cookie)
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, CookieError):
         return None
-    for name, value, domain, cookie_path, expires in cookies:
-        _add_cookie(jar, name, value, domain, cookie_path, expires)
+    for cookie in cookies:
+        _add_cookie(jar, *cookie)
     return data
 
 
