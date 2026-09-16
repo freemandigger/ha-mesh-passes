@@ -41,16 +41,17 @@ triggers:
 
 variables:
   event_types: !input event_types
-  child: "{{ trigger.to_state.attributes.child }}"
-  direction: "{{ trigger.to_state.attributes.event_type }}"
-  time: "{{ (trigger.to_state.attributes.time or '')[11:16] }}"
-  school: "{{ trigger.to_state.attributes.school }}"
-  person: "{{ trigger.to_state.attributes.person }}"
+  child: "{{ trigger.to_state.attributes.child if trigger.to_state else none }}"
+  direction: "{{ trigger.to_state.attributes.event_type if trigger.to_state else none }}"
+  time: "{{ (trigger.to_state.attributes.time or '')[11:16] if trigger.to_state else '' }}"
+  school: "{{ trigger.to_state.attributes.school if trigger.to_state else none }}"
+  person: "{{ trigger.to_state.attributes.person if trigger.to_state else none }}"
 
 conditions:
   - condition: template
     value_template: >-
       {{ trigger.from_state is not none
+         and trigger.to_state is not none
          and trigger.to_state.state not in ['unavailable', 'unknown']
          and trigger.to_state.attributes.event_type in event_types
          and (now() - as_datetime(trigger.to_state.state)).total_seconds() < 60 }}

@@ -30,9 +30,14 @@ def test_pass_notification():
     assert blueprint["triggers"] == [{"trigger": "state", "entity_id": "pass_event"}]
     assert isinstance(blueprint["triggers"][0]["entity_id"], Input)
     assert {"child", "direction", "time", "school", "person"} <= set(blueprint["variables"])
+    for name, value in blueprint["variables"].items():
+        if name == "event_types":
+            continue
+        assert "if trigger.to_state" in value
     condition = blueprint["conditions"][0]["value_template"]
     assert "total_seconds() < 60" in condition
     assert "unavailable" in condition
+    assert "trigger.to_state is not none" in condition
     assert blueprint["actions"] == "actions"
 
 
