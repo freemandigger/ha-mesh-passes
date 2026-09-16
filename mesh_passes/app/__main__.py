@@ -71,7 +71,9 @@ async def main() -> None:
         poller = Poller(auth, mesh, publisher, settings, settings.data_dir / "state.json")
         auth.on_login = poller.request_poll
 
-        runner = web.AppRunner(create_app(auth, poller, password=settings.web_password, ingress_only=settings.addon))
+        runner = web.AppRunner(
+            create_app(auth, poller, password=settings.web_password, ingress_only=settings.addon), access_log=None
+        )
         await runner.setup()
         await web.TCPSite(runner, "0.0.0.0", settings.web_port).start()
         try:
