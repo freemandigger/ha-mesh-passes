@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from datetime import datetime
@@ -18,8 +19,12 @@ class FakeClient:
     def __init__(self, fail=False):
         self.messages = []
         self.fail = fail
+        self.stall: asyncio.Event | None = None
 
     async def publish(self, topic, payload, qos=0, retain=False):
+        if self.stall is not None:
+            await self.stall.wait()
+            raise aiomqtt.MqttError("Operation timed out")
         if self.fail:
             raise aiomqtt.MqttError("connection lost")
         self.messages.append((topic, payload, retain))
@@ -140,3 +145,38 @@ async def test_republish_resends_retained():
 
     assert "homeassistant/device/mesh_passes_777/config" in client.topics()
     assert "mesh_passes/777/status" in client.topics()
+
+
+async def test_failed_send_signals_connection_lost_until_next_attach():
+    client = FakeClient()
+    publisher = MqttPublisher("homeassistant")
+    await publisher.attach(client)
+    client.fail = True
+
+    await publisher.publish_account(777, "ok", None, None)
+    await publisher.publish_event(777, IVAN, EXIT)
+
+    assert publisher.connection_lost.is_set()
+    fresh = FakeClient()
+    await publisher.attach(fresh)
+    assert not publisher.connection_lost.is_set()
+    assert ("mesh_passes/777/status", "ok", True) in fresh.messages
+    assert fresh.messages[-1][0] == "mesh_passes/777/child/101/event"
+
+
+async def test_late_failure_on_previous_client_keeps_new_connection():
+    old = FakeClient()
+    publisher = MqttPublisher("homeassistant")
+    await publisher.attach(old)
+    old.stall = asyncio.Event()
+    in_flight = asyncio.create_task(publisher.publish_account(777, "ok", None, None))
+    await asyncio.sleep(0)
+
+    new = FakeClient()
+    await publisher.attach(new)
+    old.stall.set()
+    await in_flight
+
+    assert not publisher.connection_lost.is_set()
+    await publisher.publish_account(777, "api_error", None, None)
+    assert ("mesh_passes/777/status", "api_error", True) in new.messages

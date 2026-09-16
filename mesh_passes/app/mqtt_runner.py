@@ -21,6 +21,24 @@ async def handle_message(
         poll_now()
 
 
+async def listen(client: aiomqtt.Client, prefix: str, publisher: MqttPublisher, poll_now: Callable[[], None]) -> None:
+    async def handle_all() -> None:
+        async for message in client.messages:
+            payload = message.payload if isinstance(message.payload, bytes) else str(message.payload).encode()
+            await handle_message(message.topic.value, payload, prefix, publisher, poll_now)
+
+    messages = asyncio.create_task(handle_all())
+    lost = asyncio.create_task(publisher.connection_lost.wait())
+    try:
+        await asyncio.wait({messages, lost}, return_when=asyncio.FIRST_COMPLETED)
+    finally:
+        messages.cancel()
+        lost.cancel()
+    if not messages.done():
+        raise aiomqtt.MqttError("публикация не прошла")
+    messages.result()
+
+
 async def run_mqtt(settings: Settings, publisher: MqttPublisher, poll_now: Callable[[], None]) -> None:
     while True:
         try:
@@ -36,9 +54,7 @@ async def run_mqtt(settings: Settings, publisher: MqttPublisher, poll_now: Calla
                 await client.subscribe(f"{settings.discovery_prefix}/status")
                 await client.subscribe(f"{BASE}/+/poll_now/set")
                 await publisher.attach(client)
-                async for message in client.messages:
-                    payload = message.payload if isinstance(message.payload, bytes) else str(message.payload).encode()
-                    await handle_message(message.topic.value, payload, settings.discovery_prefix, publisher, poll_now)
+                await listen(client, settings.discovery_prefix, publisher, poll_now)
         except aiomqtt.MqttError as err:
             publisher.detach()
             _LOGGER.warning("MQTT недоступен (%s), переподключение через %d с", err, RECONNECT_SECONDS)

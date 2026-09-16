@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from collections import deque
@@ -40,9 +41,11 @@ class MqttPublisher:
         self._retained: dict[str, str] = {}
         self._pending: deque[tuple[str, str]] = deque(maxlen=MAX_PENDING_EVENTS)
         self._child_topics: dict[int, list[str]] = {}
+        self.connection_lost = asyncio.Event()
 
     async def attach(self, client: MqttClient) -> None:
         self._client = client
+        self.connection_lost.clear()
         await self._send(AVAILABILITY_TOPIC, "online", retain=True)
         for topic, payload in list(self._retained.items()):
             if await self._send(topic, payload, retain=True) and not payload:
@@ -120,11 +123,14 @@ class MqttPublisher:
             del self._retained[topic]
 
     async def _send(self, topic: str, payload: str, *, retain: bool) -> bool:
-        if self._client is None:
+        client = self._client
+        if client is None:
             return False
         try:
-            await self._client.publish(topic, payload, qos=1, retain=retain)
+            await client.publish(topic, payload, qos=1, retain=retain)
         except aiomqtt.MqttError:
-            self._client = None
+            if self._client is client:
+                self._client = None
+                self.connection_lost.set()
             return False
         return True
