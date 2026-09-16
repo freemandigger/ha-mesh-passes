@@ -1,0 +1,56 @@
+blueprint:
+  name: "МЭШ: нужен вход / API не отвечает"
+  description: >-
+    Действия, когда аддону «МЭШ: проходы» нужен повторный вход в mos.ru или API МЭШ долго не отвечает.
+    В действиях доступна переменная reason: auth_required или api_error.
+    Пример текста: Нужно заново войти в МЭШ: откройте аддон «МЭШ: проходы» в Home Assistant.
+  domain: automation
+  author: ha-mesh-passes
+  source_url: https://github.com/freemandigger/ha-mesh-passes/blob/main/blueprints/automation/mesh_passes/session_alert.yaml
+  input:
+    status_sensor:
+      name: Статус аддона
+      default: sensor.mesh_account_status
+      selector:
+        entity:
+          filter:
+            - domain: sensor
+    api_error_hours:
+      name: Ошибка API дольше, часов
+      description: 0 — не уведомлять об ошибках API
+      default: 3
+      selector:
+        number:
+          min: 0
+          max: 48
+          unit_of_measurement: ч
+    actions:
+      name: Действия
+      selector:
+        action: {}
+
+mode: single
+
+triggers:
+  - trigger: state
+    entity_id: !input status_sensor
+    to: auth_required
+    for:
+      minutes: 1
+    id: auth_required
+  - trigger: state
+    entity_id: !input status_sensor
+    to: api_error
+    for:
+      hours: !input api_error_hours
+    id: api_error
+
+variables:
+  api_error_hours: !input api_error_hours
+  reason: "{{ trigger.id }}"
+
+conditions:
+  - condition: template
+    value_template: "{{ trigger.id == 'auth_required' or (api_error_hours | float(0)) > 0 }}"
+
+actions: !input actions

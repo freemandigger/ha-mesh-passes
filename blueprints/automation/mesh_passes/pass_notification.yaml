@@ -1,0 +1,58 @@
+blueprint:
+  name: "МЭШ: проход ребёнка"
+  description: >-
+    Действия при входе ребёнка в школу или выходе из неё (аддон «МЭШ: проходы»).
+    В действиях доступны переменные: child — имя ребёнка; direction — entry или exit;
+    time — время прохода ЧЧ:ММ; school — школа; person — кто привёл или забрал, если известно.
+    Пример текста уведомления: 🏫 {{ child }}: выход из школы в {{ time }}
+  domain: automation
+  author: ha-mesh-passes
+  source_url: https://github.com/freemandigger/ha-mesh-passes/blob/main/blueprints/automation/mesh_passes/pass_notification.yaml
+  input:
+    pass_event:
+      name: Проход
+      description: Сущность «Проход» ребёнка, например event.mesh_ivan_pass
+      selector:
+        entity:
+          filter:
+            - domain: event
+    event_types:
+      name: События
+      default:
+        - exit
+      selector:
+        select:
+          multiple: true
+          options:
+            - label: Вход в школу
+              value: entry
+            - label: Выход из школы
+              value: exit
+    actions:
+      name: Действия
+      selector:
+        action: {}
+
+mode: queued
+
+triggers:
+  - trigger: state
+    entity_id: !input pass_event
+
+variables:
+  event_types: !input event_types
+  child: "{{ trigger.to_state.attributes.child }}"
+  direction: "{{ trigger.to_state.attributes.event_type }}"
+  time: "{{ (trigger.to_state.attributes.time or '')[11:16] }}"
+  school: "{{ trigger.to_state.attributes.school }}"
+  person: "{{ trigger.to_state.attributes.person }}"
+
+conditions:
+  - condition: template
+    value_template: >-
+      {{ trigger.from_state is not none
+         and trigger.to_state.state not in ['unavailable', 'unknown']
+         and trigger.to_state.attributes.event_type in event_types
+         and (now() - as_datetime(trigger.to_state.state)).total_seconds() < 60 }}
+
+actions: !input actions
