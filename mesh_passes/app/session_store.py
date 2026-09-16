@@ -57,17 +57,20 @@ def save_session(path: Path, jar: aiohttp.CookieJar, data: SessionData) -> None:
 def load_session(path: Path, jar: aiohttp.CookieJar) -> SessionData | None:
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
-        for item in raw.get("cookies", []):
-            _add_cookie(
-                jar, item["name"], item["value"], item["domain"], item.get("path", "/"), item.get("expires", "")
-            )
-        return SessionData(
+        cookies = [
+            (item["name"], item["value"], item["domain"], item.get("path", "/"), item.get("expires", ""))
+            for item in raw.get("cookies", [])
+        ]
+        data = SessionData(
             raw.get("profile_id"),
             [Child(**child) for child in raw.get("children", [])],
             raw.get("logged_in_at"),
         )
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
         return None
+    for name, value, domain, cookie_path, expires in cookies:
+        _add_cookie(jar, name, value, domain, cookie_path, expires)
+    return data
 
 
 def cookie_value(jar: aiohttp.CookieJar, name: str) -> str | None:

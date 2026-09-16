@@ -1,3 +1,4 @@
+import json
 from http.cookies import SimpleCookie
 
 import aiohttp
@@ -40,6 +41,24 @@ async def test_missing_or_broken_file(tmp_path):
     broken = tmp_path / "broken.json"
     broken.write_text("{not json", encoding="utf-8")
     assert load_session(broken, jar) is None
+
+
+async def test_broken_cookie_entry_leaves_jar_untouched(tmp_path):
+    path = tmp_path / "session.json"
+    payload = {
+        "cookies": [
+            {"name": "good", "value": "v1", "domain": "mos.ru", "path": "/", "expires": ""},
+            {"name": "bad", "value": "v2"},
+        ],
+        "profile_id": 777,
+        "children": [],
+        "logged_in_at": None,
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    jar = aiohttp.CookieJar()
+    assert load_session(path, jar) is None
+    assert list(jar) == []
 
 
 async def test_set_cookie_replaces_value_in_same_domain():
