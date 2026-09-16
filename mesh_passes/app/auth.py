@@ -26,6 +26,7 @@ SCHOOL_URL = "https://school.mos.ru"
 SESSION_COOKIES = frozenset({"aupd_token", "aupd_refresh_token", "Ltpatoken2", "Ltpaexpires"})
 LOGIN_ERRORS = (aiohttp.ClientError, TimeoutError, ValueError, KeyError, TypeError, AttributeError)
 RENEW_BEFORE = timedelta(minutes=30)
+KEEPALIVE_EVERY = 3600.0
 
 
 class LoginState(enum.StrEnum):
@@ -95,6 +96,7 @@ class Auth:
         self.children: list[Child] = []
         self.logged_in_at: float | None = None
         self.last_renewal: float | None = None
+        self._last_keepalive_attempt = 0.0
         self.on_login: Callable[[], None] | None = None
 
     @property
@@ -139,6 +141,21 @@ class Auth:
             _LOGGER.warning("Сессия mos.ru истекла, нужен повторный вход")
             self.state = LoginState.AUTH_REQUIRED
             self.error = "Сессия mos.ru истекла — войдите заново"
+
+    async def keepalive(self) -> None:
+        if self.state is not LoginState.LOGGED_IN:
+            return
+        now = self._clock()
+        last = max(self.last_renewal or 0.0, self.logged_in_at or 0.0, self._last_keepalive_attempt)
+        if now - last < KEEPALIVE_EVERY:
+            return
+        self._last_keepalive_attempt = now
+        if await self._renew_sso(cookie_value(self._jar, "aupd_token")):
+            self.last_renewal = now
+            self._save()
+            _LOGGER.info("Сессия mos.ru продлена")
+        else:
+            _LOGGER.info("Сессию mos.ru не удалось продлить через SSO, токен пока действует")
 
     async def refresh_children(self) -> list[Child]:
         token = await self.token()

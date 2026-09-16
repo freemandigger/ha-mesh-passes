@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import time
 from datetime import datetime
 
 import pytest
@@ -197,6 +198,20 @@ async def test_run_waits_outside_window_and_polls_on_request(fake_mos, make_poll
 
         await wait_for(lambda: publisher.of("state"))
         assert poller.status == "ok"
+    finally:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+
+async def test_run_keeps_session_alive_outside_window(fake_mos, make_poller, logged_in_auth, publisher, clock):
+    clock.set(22, 0)
+    logged_in_auth.logged_in_at = time.time() - 3700
+    poller = make_poller()
+    task = asyncio.create_task(poller.run())
+    try:
+        await wait_for(lambda: len(fake_mos.issued_tokens) == 2)
+        await wait_for(lambda: ("account", "outside_hours") in publisher.calls)
     finally:
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):

@@ -67,6 +67,7 @@ class Poller:
         while True:
             forced = await self._sleep(delay)
             try:
+                await self._auth.keepalive()
                 if forced or in_window(self._clock(), self._settings):
                     delay = await self.poll_once()
                 else:

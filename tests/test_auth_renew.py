@@ -1,3 +1,5 @@
+import time
+
 import pytest
 
 from app.auth import LoginState, NotLoggedIn
@@ -64,3 +66,32 @@ async def test_renewal_survives_session_save_failure(fake_mos, logged_in_auth, m
 
     assert token == fake_mos.issued_tokens[-1]
     assert logged_in_auth.state is LoginState.LOGGED_IN
+
+
+async def test_keepalive_not_due_does_nothing(fake_mos, logged_in_auth):
+    await logged_in_auth.keepalive()
+    assert len(fake_mos.issued_tokens) == 1
+
+
+async def test_keepalive_renews_via_sso_when_due(fake_mos, logged_in_auth):
+    logged_in_auth.logged_in_at = time.time() - 3700
+
+    await logged_in_auth.keepalive()
+
+    assert len(fake_mos.issued_tokens) == 2
+    assert logged_in_auth.last_renewal is not None
+    await logged_in_auth.keepalive()
+    assert len(fake_mos.issued_tokens) == 2
+
+
+async def test_keepalive_failure_keeps_valid_session(fake_mos, logged_in_auth):
+    logged_in_auth.logged_in_at = time.time() - 3700
+    fake_mos.sso_alive = False
+
+    await logged_in_auth.keepalive()
+
+    assert logged_in_auth.state is LoginState.LOGGED_IN
+    assert await logged_in_auth.token() == fake_mos.issued_tokens[-1]
+    requests_before = len(fake_mos.requests)
+    await logged_in_auth.keepalive()
+    assert len(fake_mos.requests) == requests_before
