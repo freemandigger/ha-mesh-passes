@@ -25,7 +25,7 @@
 | `sensor.mesh_account_last_poll` | время последнего успешного опроса |
 | `sensor.mesh_account_token_expires` | до какого времени действует токен |
 | `button.mesh_account_poll_now` | опросить сейчас |
-| `binary_sensor.mesh_<имя>_at_school` | ребёнок в школе; атрибуты `school`, `visits` |
+| `sensor.mesh_<имя>_status` | «Сейчас»: `В школе` / `Не в школе`; атрибуты `school`, `visits` |
 | `sensor.mesh_<имя>_last_entry`, `sensor.mesh_<имя>_last_exit` | время последнего входа и выхода |
 | `event.mesh_<имя>_pass` | событие прохода `entry` / `exit`; атрибуты `child`, `time`, `school`, `person` |
 

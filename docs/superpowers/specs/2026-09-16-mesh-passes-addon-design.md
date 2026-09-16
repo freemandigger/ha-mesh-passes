@@ -250,12 +250,12 @@ Device-based discovery: одно retained-сообщение на устройс
 
 | Компонент | Тип | Источник | Retain |
 |-----------|-----|----------|--------|
-| В школе | `binary_sensor`, `device_class: presence` | `mesh_passes/<account_id>/child/<child_id>/state` → `at_school`; атрибуты `school`, `visits` | да |
+| Сейчас | `sensor`, `device_class: enum`, options `В школе` / `Не в школе` (у `binary_sensor` с `presence` в интерфейсе было бы «Дома / Не дома» — сбивает с толку) | `mesh_passes/<account_id>/child/<child_id>/state` → `at_school` (`ON` → «В школе»); атрибуты `school`, `visits` | да |
 | Последний вход | `sensor`, `timestamp` | тот же топик → `last_entry` | да |
 | Последний выход | `sensor`, `timestamp` | тот же топик → `last_exit` | да |
 | Проход | `event`, `event_types: [entry, exit]` | `mesh_passes/<account_id>/child/<child_id>/event`, JSON `{event_type, child, time, school, person}` | **нет** |
 
-`default_entity_id`: `binary_sensor.mesh_<slug>_at_school`, `sensor.mesh_<slug>_last_entry`, `sensor.mesh_<slug>_last_exit`, `event.mesh_<slug>_pass`.
+`default_entity_id`: `sensor.mesh_<slug>_status`, `sensor.mesh_<slug>_last_entry`, `sensor.mesh_<slug>_last_exit`, `event.mesh_<slug>_pass`.
 
 Поля события: `child` — `first_name`; `time` — время прохода в ISO 8601 с часовым поясом Москвы; `school` — `organizationShortName`; `person` — ФИО из `personIn` (для `entry`) или `personOut` (для `exit`), если не `null`. HA кладёт все поля, кроме `event_type`, в атрибуты сущности.
 

@@ -7,6 +7,8 @@ from app.mesh import Child
 BASE = "mesh_passes"
 AVAILABILITY_TOPIC = f"{BASE}/availability"
 STATUSES = ["ok", "auth_required", "api_error", "outside_hours"]
+AT_SCHOOL = "В школе"
+NOT_AT_SCHOOL = "Не в школе"
 REPO_URL = "https://github.com/freemandigger/ha-mesh-passes"
 TRANSLIT = str.maketrans(
     {
@@ -106,18 +108,18 @@ def child_discovery(prefix: str, profile_id: int, child: Child, slug: str) -> tu
         "origin": _origin(),
         "availability_topic": AVAILABILITY_TOPIC,
         "components": {
-            "at_school": {
-                "platform": "binary_sensor",
-                "unique_id": f"{uid}_at_school",
-                "name": "В школе",
-                "device_class": "presence",
+            "status": {
+                "platform": "sensor",
+                "unique_id": f"{uid}_status",
+                "name": "Сейчас",
+                "device_class": "enum",
+                "options": [AT_SCHOOL, NOT_AT_SCHOOL],
+                "icon": "mdi:school",
                 "state_topic": state_topic,
-                "value_template": "{{ value_json.at_school }}",
-                "payload_on": "ON",
-                "payload_off": "OFF",
+                "value_template": f"{{{{ '{AT_SCHOOL}' if value_json.at_school == 'ON' else '{NOT_AT_SCHOOL}' }}}}",
                 "json_attributes_topic": state_topic,
                 "json_attributes_template": "{{ {'school': value_json.school, 'visits': value_json.visits} | tojson }}",
-                "default_entity_id": f"binary_sensor.mesh_{slug}_at_school",
+                "default_entity_id": f"sensor.mesh_{slug}_status",
             },
             "last_entry": {
                 "platform": "sensor",

@@ -40,10 +40,15 @@ def test_child_discovery():
     assert config["device"]["name"] == "Иван (3-А)"
     assert config["device"]["via_device"] == "mesh_passes_777"
     components = config["components"]
-    assert components["at_school"]["platform"] == "binary_sensor"
-    assert components["at_school"]["device_class"] == "presence"
-    assert components["at_school"]["state_topic"] == "mesh_passes/777/child/101/state"
-    assert components["at_school"]["default_entity_id"] == "binary_sensor.mesh_ivan_at_school"
+    assert "at_school" not in components
+    assert components["status"]["platform"] == "sensor"
+    assert components["status"]["name"] == "Сейчас"
+    assert components["status"]["device_class"] == "enum"
+    assert components["status"]["options"] == ["В школе", "Не в школе"]
+    assert components["status"]["value_template"] == "{{ 'В школе' if value_json.at_school == 'ON' else 'Не в школе' }}"
+    assert components["status"]["state_topic"] == "mesh_passes/777/child/101/state"
+    assert components["status"]["default_entity_id"] == "sensor.mesh_ivan_status"
+    assert components["status"]["json_attributes_topic"] == "mesh_passes/777/child/101/state"
     assert components["last_entry"]["value_template"] == "{{ value_json.last_entry }}"
     assert components["last_exit"]["default_entity_id"] == "sensor.mesh_ivan_last_exit"
     assert components["pass"]["platform"] == "event"
