@@ -1,4 +1,5 @@
 import json
+import logging
 from collections import deque
 from datetime import datetime
 from typing import Protocol
@@ -16,6 +17,7 @@ from app.discovery import (
 from app.events import ChildState, PassEvent
 from app.mesh import Child
 
+_LOGGER = logging.getLogger(__name__)
 MAX_PENDING_EVENTS = 100
 
 
@@ -99,6 +101,12 @@ class MqttPublisher:
             }
         )
         if not await self._send(topic, payload, retain=False):
+            if len(self._pending) == MAX_PENDING_EVENTS:
+                _LOGGER.warning(
+                    "Очередь событий MQTT переполнена, старое событие отброшено (ребёнок %d, %s)",
+                    child.id,
+                    event.kind,
+                )
             self._pending.append((topic, payload))
 
     async def _ensure_account(self, profile_id: int) -> None:

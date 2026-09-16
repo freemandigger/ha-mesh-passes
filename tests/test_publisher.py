@@ -1,11 +1,12 @@
 import json
+import logging
 from datetime import datetime
 
 import aiomqtt
 
 from app.events import MSK, ChildState, PassEvent
 from app.mesh import Child
-from app.publisher import MqttPublisher
+from app.publisher import MAX_PENDING_EVENTS, MqttPublisher
 
 IVAN = Child(101, "guid-101", "Иван", "3-А")
 EXIT = PassEvent(
@@ -110,6 +111,22 @@ async def test_vanished_child_is_removed():
 
     assert ("homeassistant/device/mesh_passes_777_102/config", "", True) in client.messages
     assert ("mesh_passes/777/child/102/state", "", True) in client.messages
+
+
+async def test_pending_overflow_is_logged(caplog):
+    publisher = MqttPublisher("homeassistant")
+    with caplog.at_level(logging.WARNING, logger="app.publisher"):
+        for i in range(MAX_PENDING_EVENTS + 1):
+            event = PassEvent(f"id-{i}", 101, "exit", EXIT.at, "ГБОУ Школа № 1", None)
+            await publisher.publish_event(777, IVAN, event)
+
+    overflow_warnings = [record for record in caplog.records if "переполнена" in record.getMessage()]
+    assert len(overflow_warnings) == 1
+
+    client = FakeClient()
+    await publisher.attach(client)
+    event_messages = [message for message in client.messages if message[0] == "mesh_passes/777/child/101/event"]
+    assert len(event_messages) == MAX_PENDING_EVENTS
 
 
 async def test_republish_resends_retained():
