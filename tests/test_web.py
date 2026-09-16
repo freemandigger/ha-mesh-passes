@@ -69,7 +69,8 @@ async def test_poll_now(client, poller):
 async def test_basic_auth(aiohttp_client, auth, poller):
     client = await aiohttp_client(create_app(auth, poller, password="secret", ingress_only=False))
     assert (await client.get("/api/status")).status == 401
-    assert (await client.get("/api/status", auth=aiohttp.BasicAuth("any", "secret"))).status == 200
+    headers = {"Authorization": aiohttp.encode_basic_auth("any", "secret")}
+    assert (await client.get("/api/status", headers=headers)).status == 200
 
 
 async def test_ingress_only_rejects_other_addresses(aiohttp_client, auth, poller):
