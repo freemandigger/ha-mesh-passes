@@ -1,0 +1,33 @@
+[project]
+name = "ha-mesh-passes"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "aiohttp>=3.10,<4",
+  "aiomqtt>=2.3,<3",
+  "segno>=1.6,<2",
+  "tzdata>=2024.1",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.3",
+  "pytest-asyncio>=0.24",
+  "pytest-aiohttp>=1.0.5",
+  "pyyaml>=6.0",
+  "ruff>=0.6",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+pythonpath = ["mesh_passes"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+src = ["mesh_passes", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
