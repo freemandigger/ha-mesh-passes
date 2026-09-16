@@ -1,9 +1,10 @@
 import aiohttp
 import pytest
 
-from app.auth import Auth
+from app.auth import Auth, LoginState
 from app.mesh import MeshClient
 from fake_mos import FakeMos
+from helpers import wait_for
 
 
 @pytest.fixture
@@ -39,3 +40,11 @@ async def auth(fake_mos, login_http, api_http, tmp_path):
     )
     yield instance
     await instance.close()
+
+
+@pytest.fixture
+async def logged_in_auth(fake_mos, auth):
+    fake_mos.trusted_device = True
+    await auth.start_login()
+    await wait_for(lambda: auth.state is LoginState.LOGGED_IN)
+    return auth

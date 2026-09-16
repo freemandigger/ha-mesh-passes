@@ -9,14 +9,14 @@ import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import aiohttp
 import segno
 
 from app.mesh import Child, MeshClient, MeshError
-from app.session_store import SessionData, cookie_value, load_session, save_session
+from app.session_store import SessionData, cookie_value, load_session, save_session, set_cookie
 from app.tokens import jwt_exp
 
 _LOGGER = logging.getLogger(__name__)
@@ -25,6 +25,7 @@ LOGIN_URL = "https://login.mos.ru"
 SCHOOL_URL = "https://school.mos.ru"
 SESSION_COOKIES = frozenset({"aupd_token", "aupd_refresh_token", "Ltpatoken2", "Ltpaexpires"})
 LOGIN_ERRORS = (aiohttp.ClientError, TimeoutError, ValueError, KeyError, TypeError, AttributeError)
+RENEW_BEFORE = timedelta(minutes=30)
 
 
 class LoginState(enum.StrEnum):
@@ -111,6 +112,63 @@ class Auth:
     def token_expires(self) -> datetime | None:
         token = cookie_value(self._jar, "aupd_token")
         return jwt_exp(token) if token else None
+
+    async def token(self) -> str:
+        token = cookie_value(self._jar, "aupd_token")
+        if self.state is not LoginState.LOGGED_IN or token is None:
+            raise NotLoggedIn
+        expires = jwt_exp(token)
+        if expires is not None and expires - datetime.fromtimestamp(self._clock(), UTC) > RENEW_BEFORE:
+            return token
+        return await self.renew()
+
+    async def renew(self) -> str:
+        if self.state is not LoginState.LOGGED_IN:
+            raise NotLoggedIn
+        old = cookie_value(self._jar, "aupd_token")
+        if await self._renew_sso(old) or await self._renew_refresh(old):
+            self.last_renewal = self._clock()
+            self._save()
+            _LOGGER.info("Токен МЭШ продлён")
+            return cookie_value(self._jar, "aupd_token")
+        self.mark_expired()
+        raise NotLoggedIn
+
+    def mark_expired(self) -> None:
+        if self.state is LoginState.LOGGED_IN:
+            _LOGGER.warning("Сессия mos.ru истекла, нужен повторный вход")
+            self.state = LoginState.AUTH_REQUIRED
+            self.error = "Сессия mos.ru истекла — войдите заново"
+
+    async def refresh_children(self) -> list[Child]:
+        token = await self.token()
+        self.children = await self._mesh.children(token, self.profile_id)
+        self._save()
+        return self.children
+
+    async def _renew_sso(self, old: str | None) -> bool:
+        params = ae_params(script=False, school_url=self._school)
+        try:
+            async with self._http.get(f"{self._login}/sps/oauth/ae", params=params) as response:
+                await response.read()
+        except (aiohttp.ClientError, TimeoutError):
+            return False
+        new = cookie_value(self._jar, "aupd_token")
+        return new is not None and new != old
+
+    async def _renew_refresh(self, old: str | None) -> bool:
+        url = f"{self._school}/v2/token/refresh"
+        try:
+            async with self._http.get(url, params={"roleId": "2", "subsystem": "2"}, allow_redirects=False) as response:
+                body = (await response.text()).strip().strip('"')
+                ok = response.status in (200, 201)
+        except (aiohttp.ClientError, TimeoutError):
+            return False
+        new_exp, old_exp = jwt_exp(body), jwt_exp(old or "")
+        if not ok or new_exp is None or body == old or (old_exp is not None and new_exp <= old_exp):
+            return False
+        set_cookie(self._jar, "aupd_token", body, self._school)
+        return True
 
     async def start_login(self) -> None:
         async with self._login_lock:
