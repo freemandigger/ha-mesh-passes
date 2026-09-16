@@ -20,22 +20,36 @@ from app.web.server import create_app
 _LOGGER = logging.getLogger("app")
 USER_AGENT = f"ha-mesh-passes/{VERSION} (+{REPO_URL})"
 TIMEOUT = aiohttp.ClientTimeout(total=30)
+SUPERVISOR_MQTT_URL = "http://supervisor/services/mqtt"
 
 
 async def supervisor_mqtt(token: str) -> dict | None:
-    async with (
-        aiohttp.ClientSession(timeout=TIMEOUT) as http,
-        http.get("http://supervisor/services/mqtt", headers={"Authorization": f"Bearer {token}"}) as response,
-    ):
-        if response.status != 200:
-            return None
-        return (await response.json()).get("data")
+    try:
+        async with (
+            aiohttp.ClientSession(timeout=TIMEOUT) as http,
+            http.get(SUPERVISOR_MQTT_URL, headers={"Authorization": f"Bearer {token}"}) as response,
+        ):
+            if response.status != 200:
+                return None
+            return (await response.json()).get("data")
+    except (aiohttp.ClientError, TimeoutError, ValueError):
+        return None
+
+
+def read_addon_options(path: Path) -> dict:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as err:
+        raise SettingsError(f"Не удалось прочитать {path.name}: {type(err).__name__}") from None
+    if not isinstance(data, dict):
+        raise SettingsError(f"{path.name}: ожидается JSON-объект")
+    return data
 
 
 async def main() -> None:
     env = os.environ
     addon = "SUPERVISOR_TOKEN" in env
-    options = json.loads(Path("/data/options.json").read_text(encoding="utf-8")) if addon else {}
+    options = read_addon_options(Path("/data/options.json")) if addon else {}
     mqtt_service = await supervisor_mqtt(env["SUPERVISOR_TOKEN"]) if addon else None
     settings = build_settings(options, env, mqtt_service)
     logging.basicConfig(
@@ -61,7 +75,9 @@ async def main() -> None:
         await runner.setup()
         await web.TCPSite(runner, "0.0.0.0", settings.web_port).start()
         try:
-            await asyncio.gather(poller.run(), run_mqtt(settings, publisher, poller.request_poll))
+            async with asyncio.TaskGroup() as group:
+                group.create_task(poller.run())
+                group.create_task(run_mqtt(settings, publisher, poller.request_poll))
         finally:
             await auth.close()
             await runner.cleanup()
