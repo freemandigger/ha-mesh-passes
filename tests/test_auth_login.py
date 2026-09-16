@@ -1,3 +1,5 @@
+import asyncio
+
 import aiohttp
 
 from app.auth import Auth, LoginState
@@ -104,3 +106,30 @@ async def test_logout_removes_session(fake_mos, auth, tmp_path):
     assert auth.state is LoginState.AUTH_REQUIRED
     assert auth.token_expires() is None
     assert not (tmp_path / "session.json").exists()
+
+
+async def test_concurrent_start_login_keeps_single_qr_loop(fake_mos, auth):
+    fake_mos.qr_commands = ["showQRCode"]
+
+    await asyncio.gather(auth.start_login(), auth.start_login())
+
+    loops = [
+        task for task in asyncio.all_tasks() if task.get_coro().__qualname__ == "Auth._qr_loop" and not task.done()
+    ]
+    assert len(loops) == 1
+
+
+async def test_login_completes_when_session_cannot_be_saved(fake_mos, auth, monkeypatch):
+    fake_mos.trusted_device = True
+    logins = []
+    auth.on_login = lambda: logins.append(True)
+
+    def _raise_disk_full():
+        raise OSError("disk full")
+
+    monkeypatch.setattr(auth, "_save", _raise_disk_full)
+
+    await auth.start_login()
+
+    await wait_for(lambda: auth.state is LoginState.LOGGED_IN)
+    assert logins == [True]

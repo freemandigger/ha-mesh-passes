@@ -83,6 +83,7 @@ class Auth:
         self._qr_timeout = qr_timeout_seconds
         self._clock = clock
         self._task: asyncio.Task | None = None
+        self._login_lock = asyncio.Lock()
         self._token_before: str | None = None
         self.state = LoginState.LOGGED_OUT
         self.busy = False
@@ -112,24 +113,25 @@ class Auth:
         return jwt_exp(token) if token else None
 
     async def start_login(self) -> None:
-        await self._cancel_task()
-        self._token_before = cookie_value(self._jar, "aupd_token")
-        self.error = None
-        self.sms = None
-        link = None
-        try:
-            params = ae_params(script=True, school_url=self._school)
-            async with self._http.get(f"{self._login}/sps/oauth/ae", params=params) as response:
-                data = await response.json(content_type=None)
-            link = next((i.get("link") for i in data.get("items", []) if i.get("inquire") == "show_qr_code"), None)
-        except LOGIN_ERRORS as err:
-            _LOGGER.warning("mos.ru не начал вход: %s", type(err).__name__)
-        if not link:
-            self._fail("Не удалось начать вход: mos.ru не выдал QR-код")
-            return
-        self._show_qr(link)
-        self.state = LoginState.QR
-        self._task = asyncio.create_task(self._qr_loop())
+        async with self._login_lock:
+            await self._cancel_task()
+            self._token_before = cookie_value(self._jar, "aupd_token")
+            self.error = None
+            self.sms = None
+            link = None
+            try:
+                params = ae_params(script=True, school_url=self._school)
+                async with self._http.get(f"{self._login}/sps/oauth/ae", params=params) as response:
+                    data = await response.json(content_type=None)
+                link = next((i.get("link") for i in data.get("items", []) if i.get("inquire") == "show_qr_code"), None)
+            except LOGIN_ERRORS as err:
+                _LOGGER.warning("mos.ru не начал вход: %s", type(err).__name__)
+            if not link:
+                self._fail("Не удалось начать вход: mos.ru не выдал QR-код")
+                return
+            self._show_qr(link)
+            self.state = LoginState.QR
+            self._task = asyncio.create_task(self._qr_loop())
 
     async def submit_sms(self, code: str) -> None:
         if self.state is not LoginState.SMS or self.busy:
@@ -275,7 +277,10 @@ class Auth:
         self.error = None
         self.sms = None
         self.qr_svg = None
-        self._save()
+        try:
+            self._save()
+        except OSError as err:
+            _LOGGER.warning("Не удалось сохранить сессию mos.ru: %s", type(err).__name__)
         _LOGGER.info("Вход выполнен, детей в профиле: %d", len(self.children))
         if self.on_login:
             self.on_login()
