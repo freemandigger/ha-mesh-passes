@@ -1,0 +1,22 @@
+configuration:
+  poll_interval:
+    name: Интервал опроса, минуты
+    description: Как часто запрашивать проходы в МЭШ (от 2 до 60).
+  active_from:
+    name: Начало окна опроса
+    description: Время ЧЧ:ММ по Москве, с которого аддон опрашивает МЭШ.
+  active_to:
+    name: Конец окна опроса
+    description: Время ЧЧ:ММ по Москве, после которого опрос прекращается.
+  active_days:
+    name: Дни опроса
+    description: "Дни недели: mon, tue, wed, thu, fri, sat, sun."
+  max_event_age:
+    name: Максимальный возраст события, минуты
+    description: Проход старше этого значения обновляет датчики, но не создаёт событие для уведомлений.
+  discovery_prefix:
+    name: Префикс MQTT discovery
+    description: Обычно homeassistant.
+  log_level:
+    name: Уровень логирования
+    description: debug, info, warning или error.

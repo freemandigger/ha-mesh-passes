@@ -1,0 +1,22 @@
+configuration:
+  poll_interval:
+    name: Poll interval, minutes
+    description: How often to request passes from MESH (2 to 60).
+  active_from:
+    name: Polling window start
+    description: HH:MM, Moscow time, when polling starts.
+  active_to:
+    name: Polling window end
+    description: HH:MM, Moscow time, when polling stops.
+  active_days:
+    name: Polling days
+    description: "Days of week: mon, tue, wed, thu, fri, sat, sun."
+  max_event_age:
+    name: Maximum event age, minutes
+    description: Older passes update sensors but do not fire events for notifications.
+  discovery_prefix:
+    name: MQTT discovery prefix
+    description: Usually homeassistant.
+  log_level:
+    name: Log level
+    description: debug, info, warning or error.

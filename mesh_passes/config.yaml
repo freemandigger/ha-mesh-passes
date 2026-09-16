@@ -1,0 +1,39 @@
+name: "МЭШ: проходы"
+version: "0.1.0"
+slug: mesh_passes
+description: Проходы ребёнка через турникет школы (Москвёнок) из МЭШ в Home Assistant
+url: https://github.com/freemandigger/ha-mesh-passes
+image: "ghcr.io/freemandigger/mesh-passes-{arch}"
+arch:
+  - aarch64
+  - amd64
+stage: experimental
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:school
+panel_title: МЭШ
+services:
+  - mqtt:need
+options:
+  poll_interval: 3
+  active_from: "07:00"
+  active_to: "20:00"
+  active_days:
+    - mon
+    - tue
+    - wed
+    - thu
+    - fri
+    - sat
+  max_event_age: 30
+  discovery_prefix: homeassistant
+  log_level: info
+schema:
+  poll_interval: int(2,60)
+  active_from: match(^([01]\d|2[0-3]):[0-5]\d$)
+  active_to: match(^([01]\d|2[0-3]):[0-5]\d$)
+  active_days:
+    - list(mon|tue|wed|thu|fri|sat|sun)
+  max_event_age: int(5,240)
+  discovery_prefix: str
+  log_level: list(debug|info|warning|error)
