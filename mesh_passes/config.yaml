@@ -1,5 +1,5 @@
 name: "МЭШ: проходы"
-version: "0.1.0"
+version: "0.2.0"
 slug: mesh_passes
 description: Проходы ребёнка через турникет школы (Москвёнок) из МЭШ в Home Assistant
 url: https://github.com/freemandigger/ha-mesh-passes
