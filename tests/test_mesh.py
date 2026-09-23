@@ -134,3 +134,9 @@ async def test_marks_unexpected_payload(fake_mos, mesh, token):
     fake_mos.marks_override = {"unexpected": True}
     with pytest.raises(MeshApiError, match="unexpected"):
         await mesh.marks(token, 777, CHILD, MONTH_AGO, DAY)
+
+
+async def test_marks_payload_item_not_a_dict(fake_mos, mesh, token):
+    fake_mos.marks_override = {"payload": ["junk"]}
+    with pytest.raises(MeshApiError):
+        await mesh.marks(token, 777, CHILD, MONTH_AGO, DAY)

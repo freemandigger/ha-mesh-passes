@@ -184,5 +184,5 @@ class MeshClient:
                 for item in data["payload"]
                 if item.get("value") not in (None, "")
             ]
-        except (KeyError, TypeError, ValueError) as err:
+        except (KeyError, TypeError, ValueError, AttributeError) as err:
             raise MeshApiError(f"marks: неожиданный ответ; ключи {_keys(data)}") from err

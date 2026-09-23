@@ -345,9 +345,9 @@ async def test_marks_failure_does_not_block_exit(fake_mos, make_poller, publishe
 
     with caplog.at_level(logging.INFO, logger="app.poller"):
         clock.set(13, 2)
-        await poller.poll_once()
+        assert await poller.poll_once() == 180
         clock.set(13, 20)
-        await poller.poll_once()
+        assert await poller.poll_once() == 180
         clock.set(13, 40)
         await poller.poll_once()
 
@@ -390,6 +390,51 @@ async def test_stale_exit_releases_held_marks(fake_mos, make_poller, publisher, 
     assert publisher.of("mark") == [("mark", 101, "new", 1, None, "5")]
 
 
+async def test_exit_and_reentry_in_one_cycle(fake_mos, make_poller, publisher, clock, tmp_path):
+    poller = make_poller()
+    fake_mos.visits["guid-101"] = day("08:00", "-")
+    clock.set(9, 0)
+    await poller.poll_once()
+    fake_mos.marks["101"] = [make_mark(1, "5")]
+    clock.set(9, 30)
+    await poller.poll_once()
+
+    fake_mos.visits["guid-101"] = [
+        {
+            "date": "2026-09-16",
+            "visits": [
+                {
+                    "in": "08:00",
+                    "out": "13:00",
+                    "isIncomplete": False,
+                    "organizationId": 1234,
+                    "organizationShortName": "ГБОУ Школа № 1",
+                },
+                {
+                    "in": "13:02",
+                    "out": "-",
+                    "isIncomplete": True,
+                    "organizationId": 1234,
+                    "organizationShortName": "ГБОУ Школа № 1",
+                },
+            ],
+        }
+    ]
+    clock.set(13, 3)
+    await poller.poll_once()
+
+    assert publisher.exit_marks == [[("new", 1, None, "5")]]
+    assert publisher.of("mark") == []
+
+    fake_mos.marks["101"] = [make_mark(1, "5"), make_mark(2, "4")]
+    clock.set(13, 18)
+    await poller.poll_once()
+
+    assert publisher.of("mark") == []
+    held = [change.mark.id for change in PollerState.load(tmp_path / "state.json").held_changes(101)]
+    assert held == [2]
+
+
 async def test_marks_held_without_exit_released_next_day(fake_mos, make_poller, publisher, clock):
     poller = make_poller()
     fake_mos.visits["guid-101"] = day("08:00", "-")
@@ -407,7 +452,18 @@ async def test_marks_held_without_exit_released_next_day(fake_mos, make_poller, 
 
 
 async def test_marks_disabled(fake_mos, make_poller, publisher, tmp_path):
-    PollerState(marks={"101": {"1": ["5", "2026-09-16"]}}).save(tmp_path / "state.json")
+    held_mark = {
+        "kind": "new",
+        "id": 1,
+        "subject": "Математика",
+        "value": "5",
+        "previous": None,
+        "date": "2026-09-16",
+        "control_form": "Домашнее задание",
+        "weight": 1,
+        "is_exam": False,
+    }
+    PollerState(marks={"101": {"1": ["5", "2026-09-16"]}}, held={"101": [held_mark]}).save(tmp_path / "state.json")
     settings = build_settings({"marks_interval": 0}, {"SUPERVISOR_TOKEN": "x"}, {"host": "broker", "port": 1883})
     fake_mos.visits["guid-101"] = day("08:07", "14:33")
 
@@ -415,10 +471,12 @@ async def test_marks_disabled(fake_mos, make_poller, publisher, tmp_path):
 
     assert marks_requests(fake_mos) == []
     assert publisher.exit_marks == [[]]
-    assert PollerState.load(tmp_path / "state.json").marks == {}
+    state = PollerState.load(tmp_path / "state.json")
+    assert state.marks == {}
+    assert state.held == {}
 
 
-async def test_marks_unauthorized_renews_token(fake_mos, make_poller, publisher, clock):
+async def test_marks_unauthorized_is_a_marks_failure(fake_mos, make_poller, publisher, clock):
     poller = make_poller()
     await poller.poll_once()
     fake_mos.marks["101"] = [make_mark(1, "5")]
@@ -427,9 +485,35 @@ async def test_marks_unauthorized_renews_token(fake_mos, make_poller, publisher,
 
     await poller.poll_once()
 
-    assert len(fake_mos.issued_tokens) == 2
-    assert publisher.of("mark") == [("mark", 101, "new", 1, None, "5")]
+    assert len(fake_mos.issued_tokens) == 1
+    assert publisher.of("mark") == []
     assert poller.status == "ok"
+
+    clock.set(15, 5)
+    await poller.poll_once()
+
+    assert publisher.of("mark") == [("mark", 101, "new", 1, None, "5")]
+
+
+async def test_marks_failure_warning_is_per_child(fake_mos, make_poller, publisher, clock, caplog):
+    fake_mos.children.append({"id": 102, "contingent_guid": "guid-102", "first_name": "Мария", "class_name": "1-А"})
+    poller = make_poller()
+    await poller.poll_once()
+    fake_mos.marks_failing_students = {"101"}
+
+    with caplog.at_level(logging.INFO, logger="app.poller"):
+        clock.set(14, 50)
+        await poller.poll_once()
+        clock.set(15, 5)
+        await poller.poll_once()
+        clock.set(15, 20)
+        await poller.poll_once()
+        clock.set(15, 35)
+        await poller.poll_once()
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert sum("Оценки МЭШ недоступны" in message for message in messages) == 1
+    assert not any("Оценки МЭШ снова доступны" in message for message in messages)
 
 
 async def test_two_children_hold_marks_independently(fake_mos, make_poller, publisher, clock, tmp_path):

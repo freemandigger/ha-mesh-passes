@@ -79,6 +79,7 @@ class FakeMos:
     marks: dict[str, list[dict]] = field(default_factory=dict)
     marks_statuses: list[int] = field(default_factory=list)
     marks_override: object = None
+    marks_failing_students: set[str] = field(default_factory=set)
     issued_tokens: list[str] = field(default_factory=list)
     revoked: set[str] = field(default_factory=set)
     requests: list[Recorded] = field(default_factory=list)
@@ -218,6 +219,8 @@ class FakeMos:
             raise web.HTTPUnauthorized()
         if self.marks_statuses:
             return web.Response(status=self.marks_statuses.pop(0))
+        if request.query["student_id"] in self.marks_failing_students:
+            return web.Response(status=503)
         if self.marks_override is not None:
             return web.json_response(self.marks_override)
         return web.json_response({"payload": self.marks.get(request.query["student_id"], [])})

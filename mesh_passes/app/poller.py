@@ -64,7 +64,7 @@ class Poller:
         self.last_poll: datetime | None = None
         self.child_states: dict[int, ChildState] = {}
         self._marks_checked: dict[int, datetime] = {}
-        self._marks_failing = False
+        self._marks_failing: set[int] = set()
         if settings.marks_interval == 0:
             self._state.clear_marks()
 
@@ -177,23 +177,19 @@ class Poller:
             marks = await self._fetch_marks(child, now.date())
             changes, known = diff_marks(self._state.known_marks(child.id), marks, now.date())
         except Exception as err:
-            if not self._marks_failing:
-                self._marks_failing = True
+            if child.id not in self._marks_failing:
+                self._marks_failing.add(child.id)
                 _LOGGER.warning("Оценки МЭШ недоступны: %s", err if isinstance(err, MeshError) else type(err).__name__)
             _LOGGER.debug("Подробности ошибки оценок", exc_info=True)
             return []
         self._state.set_known_marks(child.id, known)
-        if self._marks_failing:
-            self._marks_failing = False
+        if child.id in self._marks_failing:
+            self._marks_failing.discard(child.id)
             _LOGGER.info("Оценки МЭШ снова доступны")
         return changes
 
     async def _fetch_marks(self, child: Child, today: date) -> list[Mark]:
-        profile_id, date_from = self._auth.profile_id, marks_from(today)
-        try:
-            return await self._mesh.marks(await self._auth.token(), profile_id, child, date_from, today)
-        except MeshAuthError:
-            return await self._mesh.marks(await self._auth.renew(), profile_id, child, date_from, today)
+        return await self._mesh.marks(await self._auth.token(), self._auth.profile_id, child, marks_from(today), today)
 
     def _route_marks(
         self, child: Child, changes: list[MarkChange], at_school: bool, exit_now: bool

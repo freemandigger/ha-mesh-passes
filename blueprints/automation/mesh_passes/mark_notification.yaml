@@ -8,6 +8,8 @@ blueprint:
     subject — предмет; value — оценка; previous — прежняя оценка (для changed); date — дата урока ГГГГ-ММ-ДД;
     control_form — форма контроля; weight — вес; is_exam — контрольная работа.
     Пример текста уведомления: {{ message }}
+    Home Assistant превращает числовые значения в числа: value, previous и weight могут прийти как 5, а не "5" —
+    в своих условиях сравнивайте с числом или используйте message.
   domain: automation
   author: ha-mesh-passes
   source_url: https://github.com/freemandigger/ha-mesh-passes/blob/main/blueprints/automation/mesh_passes/mark_notification.yaml
@@ -50,6 +52,7 @@ blueprint:
         action: {}
 
 mode: queued
+max: 50
 
 triggers:
   - trigger: state

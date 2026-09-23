@@ -69,7 +69,7 @@ variables:
   school: "{{ trigger.to_state.attributes.school if trigger.to_state else none }}"
   person: "{{ trigger.to_state.attributes.person if trigger.to_state else none }}"
   marks: >-
-    {{ ((trigger.to_state.attributes.marks or []) if trigger.to_state and include_marks else [])
+    {{ ((trigger.to_state.attributes.get('marks') or []) if trigger.to_state and include_marks else [])
     | rejectattr('value', 'in', skip_marks) | list }}
   marks_text: >-
     {%- set day = (trigger.to_state.attributes.time or '')[:10] if trigger.to_state else '' -%}

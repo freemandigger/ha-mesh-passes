@@ -170,6 +170,7 @@ def test_mark_notification():
     assert meta["input"]["event_types"]["default"] == ["new", "changed"]
     assert meta["input"]["skip_marks"]["default"] == ["См"]
     assert blueprint["mode"] == "queued"
+    assert blueprint["max"] == 50
     assert blueprint["triggers"] == [{"trigger": "state", "entity_id": "mark_event"}]
     assert isinstance(blueprint["triggers"][0]["entity_id"], Input)
     for name in ("child", "kind", "subject", "value", "previous", "date", "control_form", "weight", "is_exam"):
