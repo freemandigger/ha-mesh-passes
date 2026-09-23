@@ -55,3 +55,9 @@ def test_child_discovery():
     assert components["pass"]["event_types"] == ["entry", "exit"]
     assert components["pass"]["state_topic"] == "mesh_passes/777/child/101/event"
     assert components["pass"]["default_entity_id"] == "event.mesh_ivan_pass"
+    assert components["mark"]["platform"] == "event"
+    assert components["mark"]["unique_id"] == "mesh_passes_777_101_mark"
+    assert components["mark"]["name"] == "Оценка"
+    assert components["mark"]["event_types"] == ["new", "changed"]
+    assert components["mark"]["state_topic"] == "mesh_passes/777/child/101/mark"
+    assert components["mark"]["default_entity_id"] == "event.mesh_ivan_mark"

@@ -16,6 +16,7 @@ from app.discovery import (
     child_topic,
 )
 from app.events import ChildState, PassEvent
+from app.marks import MarkChange, change_fields
 from app.mesh import Child
 
 _LOGGER = logging.getLogger(__name__)
@@ -92,23 +93,31 @@ class MqttPublisher:
         }
         await self._retain(child_topic(profile_id, child.id, "state"), _json(payload))
 
-    async def publish_event(self, profile_id: int, child: Child, event: PassEvent) -> None:
-        topic = child_topic(profile_id, child.id, "event")
-        payload = _json(
-            {
-                "event_type": event.kind,
-                "child": child.first_name,
-                "time": event.at.isoformat(),
-                "school": event.school,
-                "person": event.person,
-            }
-        )
+    async def publish_event(
+        self, profile_id: int, child: Child, event: PassEvent, marks: list[MarkChange] | None = None
+    ) -> None:
+        data = {
+            "event_type": event.kind,
+            "child": child.first_name,
+            "time": event.at.isoformat(),
+            "school": event.school,
+            "person": event.person,
+        }
+        if marks is not None:
+            data["marks"] = [{"kind": change.kind, **change_fields(change)} for change in marks]
+        await self._send_event(child_topic(profile_id, child.id, "event"), _json(data), child, event.kind)
+
+    async def publish_mark(self, profile_id: int, child: Child, change: MarkChange) -> None:
+        payload = _json({"event_type": change.kind, "child": child.first_name, **change_fields(change)})
+        await self._send_event(child_topic(profile_id, child.id, "mark"), payload, child, change.kind)
+
+    async def _send_event(self, topic: str, payload: str, child: Child, kind: str) -> None:
         if not await self._send(topic, payload, retain=False):
             if len(self._pending) == MAX_PENDING_EVENTS:
                 _LOGGER.warning(
                     "Очередь событий MQTT переполнена, старое событие отброшено (ребёнок %d, %s)",
                     child.id,
-                    event.kind,
+                    kind,
                 )
             self._pending.append((topic, payload))
 

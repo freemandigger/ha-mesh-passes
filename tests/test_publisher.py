@@ -1,17 +1,22 @@
 import asyncio
 import json
 import logging
-from datetime import datetime
+from datetime import date, datetime
 
 import aiomqtt
 
 from app.events import MSK, ChildState, PassEvent
-from app.mesh import Child
+from app.marks import MarkChange
+from app.mesh import Child, Mark
 from app.publisher import MAX_PENDING_EVENTS, MqttPublisher
 
 IVAN = Child(101, "guid-101", "Иван", "3-А")
 EXIT = PassEvent(
     "2026-09-16|1234|out|14:33", 101, "exit", datetime(2026, 9, 16, 14, 33, tzinfo=MSK), "ГБОУ Школа № 1", None
+)
+LATE = MarkChange("new", Mark(7, date(2026, 9, 14), "Математика", "3", 2, "Контрольная работа", True), None)
+FIXED = MarkChange(
+    "changed", Mark(8, date(2026, 9, 16), "Русский язык", "4", 1, "Цифровое домашнее задание", False), "НВ"
 )
 
 
@@ -180,3 +185,68 @@ async def test_late_failure_on_previous_client_keeps_new_connection():
     assert not publisher.connection_lost.is_set()
     await publisher.publish_account(777, "api_error", None, None)
     assert ("mesh_passes/777/status", "api_error", True) in new.messages
+
+
+async def test_exit_event_carries_marks():
+    client = FakeClient()
+    publisher = MqttPublisher("homeassistant")
+    await publisher.attach(client)
+
+    await publisher.publish_event(777, IVAN, EXIT, [LATE, FIXED])
+
+    topic, payload, retain = client.messages[-1]
+    assert (topic, retain) == ("mesh_passes/777/child/101/event", False)
+    assert json.loads(payload)["marks"] == [
+        {
+            "kind": "new",
+            "subject": "Математика",
+            "value": "3",
+            "previous": None,
+            "date": "2026-09-14",
+            "control_form": "Контрольная работа",
+            "weight": 2,
+            "is_exam": True,
+        },
+        {
+            "kind": "changed",
+            "subject": "Русский язык",
+            "value": "4",
+            "previous": "НВ",
+            "date": "2026-09-16",
+            "control_form": "Цифровое домашнее задание",
+            "weight": 1,
+            "is_exam": False,
+        },
+    ]
+
+
+async def test_mark_event_not_retained():
+    client = FakeClient()
+    publisher = MqttPublisher("homeassistant")
+    await publisher.attach(client)
+
+    await publisher.publish_mark(777, IVAN, FIXED)
+
+    topic, payload, retain = client.messages[-1]
+    assert (topic, retain) == ("mesh_passes/777/child/101/mark", False)
+    assert json.loads(payload) == {
+        "event_type": "changed",
+        "child": "Иван",
+        "subject": "Русский язык",
+        "value": "4",
+        "previous": "НВ",
+        "date": "2026-09-16",
+        "control_form": "Цифровое домашнее задание",
+        "weight": 1,
+        "is_exam": False,
+    }
+
+
+async def test_mark_event_queued_while_disconnected():
+    publisher = MqttPublisher("homeassistant")
+    await publisher.publish_mark(777, IVAN, LATE)
+
+    client = FakeClient()
+    await publisher.attach(client)
+
+    assert client.messages[-1][0] == "mesh_passes/777/child/101/mark"

@@ -150,6 +150,15 @@ def child_discovery(prefix: str, profile_id: int, child: Child, slug: str) -> tu
                 "state_topic": child_topic(profile_id, child.id, "event"),
                 "default_entity_id": f"event.mesh_{slug}_pass",
             },
+            "mark": {
+                "platform": "event",
+                "unique_id": f"{uid}_mark",
+                "name": "Оценка",
+                "event_types": ["new", "changed"],
+                "icon": "mdi:notebook-edit",
+                "state_topic": child_topic(profile_id, child.id, "mark"),
+                "default_entity_id": f"event.mesh_{slug}_mark",
+            },
         },
     }
     return f"{prefix}/device/{uid}/config", config
