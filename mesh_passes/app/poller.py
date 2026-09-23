@@ -180,6 +180,7 @@ class Poller:
             if not self._marks_failing:
                 self._marks_failing = True
                 _LOGGER.warning("Оценки МЭШ недоступны: %s", err if isinstance(err, MeshError) else type(err).__name__)
+            _LOGGER.debug("Подробности ошибки оценок", exc_info=True)
             return []
         self._state.set_known_marks(child.id, known)
         if self._marks_failing:

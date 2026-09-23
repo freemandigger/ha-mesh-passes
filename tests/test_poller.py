@@ -360,6 +360,20 @@ async def test_marks_failure_does_not_block_exit(fake_mos, make_poller, publishe
     assert "Оценки МЭШ снова доступны" in messages
 
 
+async def test_marks_failure_logs_traceback_at_debug(fake_mos, make_poller, publisher, clock, caplog):
+    poller = make_poller()
+    await poller.poll_once()
+    fake_mos.marks_statuses = [503]
+    clock.set(14, 50)
+
+    with caplog.at_level(logging.DEBUG, logger="app.poller"):
+        await poller.poll_once()
+
+    debug_records = [record for record in caplog.records if record.getMessage() == "Подробности ошибки оценок"]
+    assert len(debug_records) == 1
+    assert debug_records[0].exc_info is not None
+
+
 async def test_stale_exit_releases_held_marks(fake_mos, make_poller, publisher, clock):
     poller = make_poller()
     fake_mos.visits["guid-101"] = day("08:00", "-")
