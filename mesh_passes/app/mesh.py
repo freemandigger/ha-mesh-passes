@@ -43,6 +43,17 @@ class Visit:
     person_out: str | None
 
 
+@dataclass(frozen=True)
+class Mark:
+    id: int
+    day: date
+    subject: str
+    value: str
+    weight: int | None
+    control_form: str | None
+    is_exam: bool
+
+
 def _person(value: object) -> str | None:
     if isinstance(value, dict):
         parts = [value.get(key) for key in ("lastName", "firstName", "middleName")]
@@ -150,3 +161,28 @@ class MeshClient:
             ]
         except (KeyError, TypeError, ValueError) as err:
             raise MeshApiError(f"visit_durations: неожиданный ответ; ключи {_keys(data)}") from err
+
+    async def marks(self, token: str, profile_id: int, child: Child, date_from: date, date_to: date) -> list[Mark]:
+        data = await self._json(
+            "GET",
+            "/api/family/mobile/v1/marks",
+            token,
+            headers={**MOBILE_HEADERS, "profile-id": str(profile_id)},
+            params={"student_id": str(child.id), "from": date_from.isoformat(), "to": date_to.isoformat()},
+        )
+        try:
+            return [
+                Mark(
+                    id=int(item["id"]),
+                    day=date.fromisoformat(str(item["date"])[:10]),
+                    subject=str(item.get("subject_name") or ""),
+                    value=str(item["value"]),
+                    weight=int(item["weight"]) if item.get("weight") is not None else None,
+                    control_form=item.get("control_form_name") or None,
+                    is_exam=bool(item.get("is_exam")),
+                )
+                for item in data["payload"]
+                if item.get("value") not in (None, "")
+            ]
+        except (KeyError, TypeError, ValueError) as err:
+            raise MeshApiError(f"marks: неожиданный ответ; ключи {_keys(data)}") from err

@@ -29,6 +29,36 @@ def default_children() -> list[dict]:
     return [{"id": 101, "contingent_guid": "guid-101", "first_name": "Иван", "class_name": "3-А"}]
 
 
+def make_mark(
+    mark_id: int,
+    value: str,
+    day: str = "2026-09-16",
+    subject: str = "Математика",
+    form: str | None = "Домашнее задание",
+    weight: int | None = 1,
+    exam: bool = False,
+) -> dict:
+    return {
+        "id": mark_id,
+        "date": day,
+        "subject_id": 11,
+        "subject_name": subject,
+        "value": value,
+        "weight": weight,
+        "control_form_name": form,
+        "is_exam": exam,
+        "is_point": False,
+        "point_date": None,
+        "comment": None,
+        "comment_exists": False,
+        "has_files": False,
+        "created_at": f"{day}T10:00:00",
+        "updated_at": f"{day}T10:00:00",
+        "original_grade_system_type": "five",
+        "values": [],
+    }
+
+
 @dataclass
 class FakeMos:
     base_url: str = ""
@@ -46,6 +76,9 @@ class FakeMos:
     visits_override: object = None
     api_status: int = 200
     api_headers: dict[str, str] = field(default_factory=dict)
+    marks: dict[str, list[dict]] = field(default_factory=dict)
+    marks_statuses: list[int] = field(default_factory=list)
+    marks_override: object = None
     issued_tokens: list[str] = field(default_factory=list)
     revoked: set[str] = field(default_factory=set)
     requests: list[Recorded] = field(default_factory=list)
@@ -65,6 +98,7 @@ class FakeMos:
         app.router.add_post("/api/ej/acl/v1/sessions", self._sessions)
         app.router.add_get("/api/family/mobile/v1/profile", self._profile)
         app.router.add_get("/api/pass/entrances/v1/visit_durations", self._visit_durations)
+        app.router.add_get("/api/family/mobile/v1/marks", self._marks)
         return app
 
     @web.middleware
@@ -175,3 +209,15 @@ class FakeMos:
         if self.visits_override is not None:
             return web.json_response(self.visits_override)
         return web.json_response({"payload": self.visits.get(request.query["personId"], [])})
+
+    async def _marks(self, request: web.Request) -> web.Response:
+        if "Cookie" in request.headers or "Auth-Token" in request.headers:
+            body = {"code": 401, "description": "Found multiple bearer tokens in the request"}
+            return web.json_response(body, status=401)
+        if not self._authorized(request):
+            raise web.HTTPUnauthorized()
+        if self.marks_statuses:
+            return web.Response(status=self.marks_statuses.pop(0))
+        if self.marks_override is not None:
+            return web.json_response(self.marks_override)
+        return web.json_response({"payload": self.marks.get(request.query["student_id"], [])})

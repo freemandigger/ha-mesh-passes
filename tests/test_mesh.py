@@ -3,9 +3,9 @@ from datetime import UTC, date, datetime
 
 import pytest
 
-from app.mesh import Child, MeshApiError, MeshAuthError, MeshClient, Visit
+from app.mesh import Child, Mark, MeshApiError, MeshAuthError, MeshClient, Visit
 from app.tokens import jwt_exp
-from fake_mos import make_jwt
+from fake_mos import make_jwt, make_mark
 
 CHILD = Child(101, "guid-101", "Иван", "3-А")
 DAY = date(2026, 9, 16)
@@ -83,3 +83,54 @@ async def test_unexpected_payload(fake_mos, mesh, token):
     fake_mos.visits_override = {"unexpected": True}
     with pytest.raises(MeshApiError, match="unexpected"):
         await mesh.visits(token, 777, CHILD, DAY)
+
+
+MONTH_AGO = date(2026, 8, 18)
+
+
+async def test_marks_parsed(fake_mos, mesh, token):
+    fake_mos.marks["101"] = [
+        make_mark(1, "5", subject="Русский язык", form="Диктант"),
+        make_mark(2, "3", day="2026-09-15", form="Контрольная работа", weight=2, exam=True),
+        make_mark(3, "НВ", form=None, weight=None),
+        make_mark(4, ""),
+    ]
+
+    marks = await mesh.marks(token, 777, CHILD, MONTH_AGO, DAY)
+
+    assert marks == [
+        Mark(1, DAY, "Русский язык", "5", 1, "Диктант", False),
+        Mark(2, date(2026, 9, 15), "Математика", "3", 2, "Контрольная работа", True),
+        Mark(3, DAY, "Математика", "НВ", None, None, False),
+    ]
+
+
+async def test_marks_request_carries_only_bearer(fake_mos, mesh, token):
+    await mesh.marks(token, 777, CHILD, MONTH_AGO, DAY)
+    request = fake_mos.requests[-1]
+    assert request.path == "/api/family/mobile/v1/marks"
+    assert request.headers["Authorization"] == f"Bearer {token}"
+    assert request.headers["x-mes-subsystem"] == "familymp"
+    assert request.headers["client-type"] == "diary-mobile"
+    assert request.headers["profile-id"] == "777"
+    assert "Cookie" not in request.headers
+    assert "Auth-Token" not in request.headers
+    assert request.query == {"student_id": "101", "from": "2026-08-18", "to": "2026-09-16"}
+
+
+async def test_marks_unauthorized(fake_mos, mesh, token):
+    fake_mos.marks_statuses = [401]
+    with pytest.raises(MeshAuthError):
+        await mesh.marks(token, 777, CHILD, MONTH_AGO, DAY)
+
+
+async def test_marks_server_error(fake_mos, mesh, token):
+    fake_mos.marks_statuses = [503]
+    with pytest.raises(MeshApiError):
+        await mesh.marks(token, 777, CHILD, MONTH_AGO, DAY)
+
+
+async def test_marks_unexpected_payload(fake_mos, mesh, token):
+    fake_mos.marks_override = {"unexpected": True}
+    with pytest.raises(MeshApiError, match="unexpected"):
+        await mesh.marks(token, 777, CHILD, MONTH_AGO, DAY)
