@@ -1,0 +1,86 @@
+blueprint:
+  name: "МЭШ: оценка"
+  description: >-
+    Действия, когда в МЭШ появилась новая оценка или учитель исправил выставленную (аддон «МЭШ: проходы»).
+    Пока ребёнок в школе, аддон копит оценки и отдаёт их вместе с выходом (blueprint «МЭШ: проход ребёнка»),
+    поэтому здесь приходят оценки вне школьного времени, в том числе поздние — за прошлые дни.
+    В действиях доступны переменные: message — готовый текст; child — имя ребёнка; kind — new или changed;
+    subject — предмет; value — оценка; previous — прежняя оценка (для changed); date — дата урока ГГГГ-ММ-ДД;
+    control_form — форма контроля; weight — вес; is_exam — контрольная работа.
+    Пример текста уведомления: {{ message }}
+  domain: automation
+  author: ha-mesh-passes
+  source_url: https://github.com/freemandigger/ha-mesh-passes/blob/main/blueprints/automation/mesh_passes/mark_notification.yaml
+  input:
+    mark_event:
+      name: Оценка
+      description: Сущность «Оценка» ребёнка, например event.mesh_ivan_mark
+      selector:
+        entity:
+          filter:
+            - domain: event
+    event_types:
+      name: События
+      default:
+        - new
+        - changed
+      selector:
+        select:
+          multiple: true
+          options:
+            - label: Новая оценка
+              value: new
+            - label: Оценка исправлена
+              value: changed
+    skip_marks:
+      name: Не показывать отметки
+      description: Отметки, о которых не сообщать. «См» — цифровое домашнее задание проверено, «НВ» — не выполнено.
+      default:
+        - См
+      selector:
+        select:
+          multiple: true
+          custom_value: true
+          options:
+            - См
+            - НВ
+    actions:
+      name: Действия
+      selector:
+        action: {}
+
+mode: queued
+
+triggers:
+  - trigger: state
+    entity_id: !input mark_event
+
+variables:
+  event_types: !input event_types
+  skip_marks: !input skip_marks
+  child: "{{ trigger.to_state.attributes.child if trigger.to_state else none }}"
+  kind: "{{ trigger.to_state.attributes.event_type if trigger.to_state else none }}"
+  subject: "{{ trigger.to_state.attributes.subject if trigger.to_state else none }}"
+  value: "{{ trigger.to_state.attributes.value if trigger.to_state else none }}"
+  previous: "{{ trigger.to_state.attributes.previous if trigger.to_state else none }}"
+  date: "{{ trigger.to_state.attributes.date if trigger.to_state else none }}"
+  control_form: "{{ trigger.to_state.attributes.control_form if trigger.to_state else none }}"
+  weight: "{{ trigger.to_state.attributes.weight if trigger.to_state else none }}"
+  is_exam: "{{ trigger.to_state.attributes.is_exam if trigger.to_state else none }}"
+  message: >-
+    {%- set notes = ([control_form] if control_form else [])
+    + (['за ' ~ date[8:10] ~ '.' ~ date[5:7]] if date and date != now().strftime('%Y-%m-%d') else []) -%}
+    {{ '📘 ' ~ child ~ ', ' ~ subject ~ ': ' ~ ((previous ~ ' → ' ~ value) if kind == 'changed' else value)
+    ~ ((' (' ~ notes | join(', ') ~ ')') if notes else '') }}
+
+conditions:
+  - condition: template
+    value_template: >-
+      {{ trigger.from_state is not none
+         and trigger.to_state is not none
+         and trigger.to_state.state not in ['unavailable', 'unknown']
+         and trigger.to_state.attributes.event_type in event_types
+         and trigger.to_state.attributes.value not in skip_marks
+         and (now() - as_datetime(trigger.to_state.state)).total_seconds() < 60 }}
+
+actions: !input actions

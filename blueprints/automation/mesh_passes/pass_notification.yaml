@@ -2,9 +2,11 @@ blueprint:
   name: "МЭШ: проход ребёнка"
   description: >-
     Действия при входе ребёнка в школу или выходе из неё (аддон «МЭШ: проходы»).
-    В действиях доступны переменные: child — имя ребёнка; direction — entry или exit;
-    time — время прохода ЧЧ:ММ; school — школа; person — кто привёл или забрал, если известно.
-    Пример текста уведомления: 🏫 {{ child }}: выход из школы в {{ time }}
+    В действиях доступны переменные: message — готовый текст уведомления (при выходе — с оценками,
+    выставленными, пока ребёнок был в школе); child — имя ребёнка; direction — entry или exit;
+    time — время прохода ЧЧ:ММ; school — школа; person — кто привёл или забрал, если известно;
+    marks_text — строки с оценками; marks — список оценок.
+    Пример текста уведомления: {{ message }}
   domain: automation
   author: ha-mesh-passes
   source_url: https://github.com/freemandigger/ha-mesh-passes/blob/main/blueprints/automation/mesh_passes/pass_notification.yaml
@@ -28,6 +30,24 @@ blueprint:
               value: entry
             - label: Выход из школы
               value: exit
+    include_marks:
+      name: Добавлять оценки к выходу
+      description: Оценки, выставленные, пока ребёнок был в школе, попадут в message и marks_text.
+      default: true
+      selector:
+        boolean: {}
+    skip_marks:
+      name: Не показывать отметки
+      description: Отметки, которые не включать в текст. «См» — цифровое домашнее задание проверено, «НВ» — не выполнено.
+      default:
+        - См
+      selector:
+        select:
+          multiple: true
+          custom_value: true
+          options:
+            - См
+            - НВ
     actions:
       name: Действия
       selector:
@@ -41,11 +61,29 @@ triggers:
 
 variables:
   event_types: !input event_types
+  include_marks: !input include_marks
+  skip_marks: !input skip_marks
   child: "{{ trigger.to_state.attributes.child if trigger.to_state else none }}"
   direction: "{{ trigger.to_state.attributes.event_type if trigger.to_state else none }}"
   time: "{{ (trigger.to_state.attributes.time or '')[11:16] if trigger.to_state else '' }}"
   school: "{{ trigger.to_state.attributes.school if trigger.to_state else none }}"
   person: "{{ trigger.to_state.attributes.person if trigger.to_state else none }}"
+  marks: >-
+    {{ ((trigger.to_state.attributes.marks or []) if trigger.to_state and include_marks else [])
+    | rejectattr('value', 'in', skip_marks) | list }}
+  marks_text: >-
+    {%- set day = (trigger.to_state.attributes.time or '')[:10] if trigger.to_state else '' -%}
+    {%- set ns = namespace(lines=[]) -%}
+    {%- for m in marks -%}
+    {%- set grade = (m.previous ~ ' → ' ~ m.value) if m.kind == 'changed' else m.value -%}
+    {%- set notes = ([m.control_form] if m.control_form else [])
+    + (['за ' ~ m.date[8:10] ~ '.' ~ m.date[5:7]] if m.date != day else []) -%}
+    {%- set ns.lines = ns.lines + [m.subject ~ ': ' ~ grade ~ ((' (' ~ notes | join(', ') ~ ')') if notes else '')] -%}
+    {%- endfor -%}
+    {{ ns.lines | join('\n') }}
+  message: >-
+    {{ '🏫 ' ~ child ~ ': ' ~ ('вход в школу' if direction == 'entry' else 'выход из школы') ~ ' в ' ~ time
+    ~ (('\n' ~ marks_text) if marks_text else '') }}
 
 conditions:
   - condition: template
