@@ -12,6 +12,7 @@ DEFAULT_OPTIONS: dict[str, object] = {
     "active_to": "20:00",
     "active_days": ["mon", "tue", "wed", "thu", "fri", "sat"],
     "max_event_age": 30,
+    "marks_interval": 15,
     "discovery_prefix": "homeassistant",
     "log_level": "info",
 }
@@ -29,6 +30,7 @@ class Settings:
     active_to: time
     active_days: frozenset[int]
     max_event_age: int
+    marks_interval: int
     discovery_prefix: str
     log_level: str
     mqtt_host: str
@@ -111,6 +113,7 @@ def build_settings(
         active_to=active_to,
         active_days=_days(merged["active_days"]),
         max_event_age=_int("max_event_age", merged["max_event_age"], 5, 240),
+        marks_interval=_int("marks_interval", merged["marks_interval"], 0, 120),
         discovery_prefix=str(merged["discovery_prefix"]).strip("/") or "homeassistant",
         log_level=log_level,
         mqtt_host=mqtt_host,

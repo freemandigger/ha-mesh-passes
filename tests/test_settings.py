@@ -2,8 +2,9 @@ from datetime import time
 from pathlib import Path
 
 import pytest
+import yaml
 
-from app.settings import SettingsError, build_settings
+from app.settings import DEFAULT_OPTIONS, SettingsError, build_settings
 
 ADDON_ENV = {"SUPERVISOR_TOKEN": "x"}
 MQTT = {"host": "core-mosquitto", "port": 1883, "username": "addons", "password": "secret"}
@@ -16,6 +17,7 @@ def test_addon_defaults():
     assert (settings.active_from, settings.active_to) == (time(7, 0), time(20, 0))
     assert settings.active_days == frozenset({0, 1, 2, 3, 4, 5})
     assert settings.max_event_age == 30
+    assert settings.marks_interval == 15
     assert settings.discovery_prefix == "homeassistant"
     assert settings.log_level == "info"
     assert (settings.mqtt_host, settings.mqtt_port) == ("core-mosquitto", 1883)
@@ -45,6 +47,7 @@ def test_docker_reads_environment():
         "POLL_INTERVAL": "10",
         "ACTIVE_DAYS": "mon,fri",
         "DATA_DIR": "/tmp/mesh",
+        "MARKS_INTERVAL": "0",
     }
     settings = build_settings({}, env, None)
     assert settings.addon is False
@@ -53,6 +56,7 @@ def test_docker_reads_environment():
     assert settings.active_days == frozenset({0, 4})
     assert settings.web_password == "pw"
     assert settings.data_dir == Path("/tmp/mesh")
+    assert settings.marks_interval == 0
 
 
 def test_docker_requires_web_password():
@@ -69,6 +73,8 @@ def test_docker_requires_web_password():
         ({"active_from": "20:00", "active_to": "07:00"}, "active_to"),
         ({"active_days": ["funday"]}, "active_days"),
         ({"log_level": "loud"}, "log_level"),
+        ({"marks_interval": 121}, "marks_interval"),
+        ({"marks_interval": -1}, "marks_interval"),
     ],
 )
 def test_invalid_options(options, message):
@@ -96,3 +102,9 @@ def test_addon_discovery_prefix_normalization():
 def test_addon_discovery_prefix_slash_only():
     settings = build_settings({"discovery_prefix": "/"}, ADDON_ENV, MQTT)
     assert settings.discovery_prefix == "homeassistant"
+
+
+def test_addon_config_matches_defaults():
+    config = yaml.safe_load((Path(__file__).resolve().parents[1] / "mesh_passes" / "config.yaml").read_text())
+    assert config["options"] == DEFAULT_OPTIONS
+    assert config["schema"]["marks_interval"] == "int(0,120)"

@@ -26,6 +26,7 @@ options:
     - fri
     - sat
   max_event_age: 30
+  marks_interval: 15
   discovery_prefix: homeassistant
   log_level: info
 schema:
@@ -35,5 +36,6 @@ schema:
   active_days:
     - list(mon|tue|wed|thu|fri|sat|sun)
   max_event_age: int(5,240)
+  marks_interval: int(0,120)
   discovery_prefix: str
   log_level: list(debug|info|warning|error)

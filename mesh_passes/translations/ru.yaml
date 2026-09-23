@@ -14,6 +14,9 @@ configuration:
   max_event_age:
     name: Максимальный возраст события, минуты
     description: Проход старше этого значения обновляет датчики, но не создаёт событие для уведомлений.
+  marks_interval:
+    name: Интервал проверки оценок, минуты
+    description: Как часто запрашивать оценки в МЭШ (от 0 до 120). 0 — не запрашивать оценки.
   discovery_prefix:
     name: Префикс MQTT discovery
     description: Обычно homeassistant.
