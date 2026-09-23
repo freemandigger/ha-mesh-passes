@@ -63,14 +63,16 @@ class PollerState:
         self.seen = {event_id: day for event_id, day in self.seen.items() if day >= cutoff}
 
     def known_marks(self, child_id: int) -> Known | None:
-        return self.marks.get(str(child_id))
+        known = self.marks.get(str(child_id))
+        return known if isinstance(known, dict) else None
 
     def set_known_marks(self, child_id: int, known: Known) -> None:
         self.marks[str(child_id)] = known
 
     def held_changes(self, child_id: int) -> list[MarkChange]:
+        stored = self.held.get(str(child_id))
         changes = []
-        for item in self.held.get(str(child_id), []):
+        for item in stored if isinstance(stored, list) else []:
             try:
                 changes.append(change_from_dict(item))
             except (KeyError, TypeError, ValueError, AttributeError):

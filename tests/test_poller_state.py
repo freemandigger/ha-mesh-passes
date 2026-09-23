@@ -98,6 +98,20 @@ def test_broken_held_entries_are_skipped():
     assert [change.mark.id for change in state.held_changes(101)] == [1]
 
 
+def test_held_changes_tolerates_non_list_entry():
+    state = PollerState(held={"101": None, "102": "junk"})
+
+    assert state.held_changes(101) == []
+    assert state.held_changes(102) == []
+
+
+def test_known_marks_ignores_non_dict_entry():
+    state = PollerState(marks={"101": None, "102": ["x"]})
+
+    assert state.known_marks(101) is None
+    assert state.known_marks(102) is None
+
+
 def test_clear_marks():
     state = PollerState(marks={"101": {}}, held={"101": []})
     state.clear_marks()
