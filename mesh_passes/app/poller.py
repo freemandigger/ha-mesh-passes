@@ -7,7 +7,8 @@ from typing import Protocol
 
 from app.auth import Auth, LoginState, NotLoggedIn
 from app.events import MSK, ChildState, PassEvent, child_state, visit_events
-from app.mesh import Child, MeshApiError, MeshAuthError, MeshClient
+from app.marks import MarkChange, diff_marks, marks_from, merge_held
+from app.mesh import Child, Mark, MeshApiError, MeshAuthError, MeshClient, MeshError
 from app.poller_state import PollerState
 from app.schedule import in_window
 from app.settings import Settings
@@ -25,7 +26,11 @@ class Publisher(Protocol):
 
     async def publish_child_state(self, profile_id: int, child: Child, state: ChildState) -> None: ...
 
-    async def publish_event(self, profile_id: int, child: Child, event: PassEvent) -> None: ...
+    async def publish_event(
+        self, profile_id: int, child: Child, event: PassEvent, marks: list[MarkChange] | None = None
+    ) -> None: ...
+
+    async def publish_mark(self, profile_id: int, child: Child, change: MarkChange) -> None: ...
 
 
 def _moscow_now() -> datetime:
@@ -58,6 +63,10 @@ class Poller:
         self.status = "ok" if auth.state is LoginState.LOGGED_IN else "auth_required"
         self.last_poll: datetime | None = None
         self.child_states: dict[int, ChildState] = {}
+        self._marks_checked: dict[int, datetime] = {}
+        self._marks_failing = False
+        if settings.marks_interval == 0:
+            self._state.clear_marks()
 
     def request_poll(self) -> None:
         self._wake.set()
@@ -147,9 +156,53 @@ class Poller:
         self._state.set_last_times(child.id, state.last_entry, state.last_exit)
         self.child_states[child.id] = state
         await self._publisher.publish_child_state(self._auth.profile_id, child, state)
+        exits = [event for event in fresh if event.kind == "exit"]
+        changes = await self._check_marks(child, now, bool(exits))
+        exit_marks, mark_events = self._route_marks(child, changes, state.at_school, bool(exits))
         for event in fresh:
             _LOGGER.info("Проход: %s, ребёнок %d", event.kind, child.id)
-            await self._publisher.publish_event(self._auth.profile_id, child, event)
+            marks = exit_marks if exits and event is exits[-1] else None
+            await self._publisher.publish_event(self._auth.profile_id, child, event, marks)
+        for change in mark_events:
+            _LOGGER.info("Оценка: %s, ребёнок %d", change.kind, child.id)
+            await self._publisher.publish_mark(self._auth.profile_id, child, change)
+
+    async def _check_marks(self, child: Child, now: datetime, exit_now: bool) -> list[MarkChange]:
+        interval = timedelta(minutes=self._settings.marks_interval)
+        last = self._marks_checked.get(child.id)
+        if not interval or not (exit_now or last is None or now - last >= interval):
+            return []
+        self._marks_checked[child.id] = now
+        try:
+            marks = await self._fetch_marks(child, now.date())
+            changes, known = diff_marks(self._state.known_marks(child.id), marks, now.date())
+        except Exception as err:
+            if not self._marks_failing:
+                self._marks_failing = True
+                _LOGGER.warning("Оценки МЭШ недоступны: %s", err if isinstance(err, MeshError) else type(err).__name__)
+            return []
+        self._state.set_known_marks(child.id, known)
+        if self._marks_failing:
+            self._marks_failing = False
+            _LOGGER.info("Оценки МЭШ снова доступны")
+        return changes
+
+    async def _fetch_marks(self, child: Child, today: date) -> list[Mark]:
+        profile_id, date_from = self._auth.profile_id, marks_from(today)
+        try:
+            return await self._mesh.marks(await self._auth.token(), profile_id, child, date_from, today)
+        except MeshAuthError:
+            return await self._mesh.marks(await self._auth.renew(), profile_id, child, date_from, today)
+
+    def _route_marks(
+        self, child: Child, changes: list[MarkChange], at_school: bool, exit_now: bool
+    ) -> tuple[list[MarkChange], list[MarkChange]]:
+        pending = merge_held(self._state.held_changes(child.id), changes)
+        if at_school and not exit_now:
+            self._state.set_held(child.id, pending)
+            return [], []
+        self._state.set_held(child.id, [])
+        return (pending, []) if exit_now else ([], pending)
 
     async def _set_status(self, status: str) -> None:
         self.status = status
