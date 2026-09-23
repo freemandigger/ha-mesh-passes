@@ -4,6 +4,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from app.events import PassEvent
+from app.marks import Known, MarkChange, change_from_dict, change_to_dict
 from app.session_store import write_private_json
 
 KEEP_DAYS = 3
@@ -21,17 +22,24 @@ def _format(value: datetime | None) -> str | None:
 class PollerState:
     seen: dict[str, str] = field(default_factory=dict)
     last: dict[str, dict[str, str | None]] = field(default_factory=dict)
+    marks: dict[str, Known] = field(default_factory=dict)
+    held: dict[str, list[dict]] = field(default_factory=dict)
 
     @classmethod
     def load(cls, path: Path) -> "PollerState":
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
-            return cls(dict(raw.get("seen", {})), dict(raw.get("last", {})))
+            return cls(
+                dict(raw.get("seen", {})),
+                dict(raw.get("last", {})),
+                dict(raw.get("marks", {})),
+                dict(raw.get("held", {})),
+            )
         except (OSError, ValueError, TypeError, AttributeError):
             return cls()
 
     def save(self, path: Path) -> None:
-        write_private_json(path, {"seen": self.seen, "last": self.last})
+        write_private_json(path, {"seen": self.seen, "last": self.last, "marks": self.marks, "held": self.held})
 
     def take_new(self, events: list[PassEvent], now: datetime, max_age: timedelta) -> list[PassEvent]:
         fresh = []
@@ -53,3 +61,28 @@ class PollerState:
     def prune(self, today: date) -> None:
         cutoff = (today - timedelta(days=KEEP_DAYS)).isoformat()
         self.seen = {event_id: day for event_id, day in self.seen.items() if day >= cutoff}
+
+    def known_marks(self, child_id: int) -> Known | None:
+        return self.marks.get(str(child_id))
+
+    def set_known_marks(self, child_id: int, known: Known) -> None:
+        self.marks[str(child_id)] = known
+
+    def held_changes(self, child_id: int) -> list[MarkChange]:
+        changes = []
+        for item in self.held.get(str(child_id), []):
+            try:
+                changes.append(change_from_dict(item))
+            except (KeyError, TypeError, ValueError, AttributeError):
+                continue
+        return changes
+
+    def set_held(self, child_id: int, changes: list[MarkChange]) -> None:
+        if changes:
+            self.held[str(child_id)] = [change_to_dict(change) for change in changes]
+        else:
+            self.held.pop(str(child_id), None)
+
+    def clear_marks(self) -> None:
+        self.marks.clear()
+        self.held.clear()

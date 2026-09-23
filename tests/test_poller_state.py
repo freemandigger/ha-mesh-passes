@@ -1,6 +1,8 @@
 from datetime import date, datetime, timedelta
 
 from app.events import MSK, PassEvent
+from app.marks import MarkChange
+from app.mesh import Mark
 from app.poller_state import PollerState
 
 NOW = datetime(2026, 9, 16, 14, 35, tzinfo=MSK)
@@ -44,3 +46,59 @@ def test_load_broken_file(tmp_path):
     path = tmp_path / "state.json"
     path.write_text("[]", encoding="utf-8")
     assert PollerState.load(path) == PollerState()
+
+
+FIXED = MarkChange(
+    "changed", Mark(7, date(2026, 9, 16), "Математика", "4", 1, "Цифровое домашнее задание", False), "НВ"
+)
+
+
+def test_marks_and_held_round_trip(tmp_path):
+    path = tmp_path / "state.json"
+    state = PollerState()
+    state.set_known_marks(101, {"7": ["4", "2026-09-16"]})
+    state.set_held(101, [FIXED])
+    state.save(path)
+
+    loaded = PollerState.load(path)
+
+    assert loaded.known_marks(101) == {"7": ["4", "2026-09-16"]}
+    assert loaded.known_marks(102) is None
+    assert loaded.held_changes(101) == [FIXED]
+    assert loaded.held_changes(102) == []
+    loaded.set_held(101, [])
+    assert loaded.held == {}
+
+
+def test_state_without_marks_loads(tmp_path):
+    path = tmp_path / "state.json"
+    path.write_text('{"seen": {"x": "2026-09-16"}, "last": {}}', encoding="utf-8")
+
+    state = PollerState.load(path)
+
+    assert state.seen == {"x": "2026-09-16"}
+    assert state.known_marks(101) is None
+    assert state.held_changes(101) == []
+
+
+def test_broken_held_entries_are_skipped():
+    good = {
+        "kind": "new",
+        "id": 1,
+        "date": "2026-09-16",
+        "subject": "Математика",
+        "value": "5",
+        "previous": None,
+        "control_form": None,
+        "weight": 1,
+        "is_exam": False,
+    }
+    state = PollerState(held={"101": [{"kind": "new"}, good, "junk"]})
+
+    assert [change.mark.id for change in state.held_changes(101)] == [1]
+
+
+def test_clear_marks():
+    state = PollerState(marks={"101": {}}, held={"101": []})
+    state.clear_marks()
+    assert (state.marks, state.held) == ({}, {})
