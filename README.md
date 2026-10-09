@@ -1,6 +1,6 @@
 # МЭШ: проходы — аддон Home Assistant
 
-Проходы ребёнка через турникет школы (карта «Москвёнок») из Московской электронной школы — в Home Assistant: датчик «в школе», время входа и выхода, события для уведомлений.
+Проходы ребёнка через турникет школы (карта «Москвёнок») из Московской электронной школы — в Home Assistant: датчик «в школе», время входа и выхода, новые оценки и события для уведомлений.
 
 > ⚠️ **Неофициальный проект.** Не связан с ДИТ Москвы и mos.ru. Использует неофициальный API МЭШ, который может измениться без предупреждения. Автоматизированный доступ может противоречить пользовательскому соглашению mos.ru — возможна блокировка учётной записи. Данные остаются в вашем Home Assistant. Используйте только для своих детей.
 
@@ -16,11 +16,15 @@
 
 ## Уведомления
 
-[![Импорт blueprint «проход ребёнка»](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Ffreemandigger%2Fha-mesh-passes%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fmesh_passes%2Fpass_notification.yaml)
-[![Импорт blueprint «нужен вход»](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Ffreemandigger%2Fha-mesh-passes%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fmesh_passes%2Fsession_alert.yaml)
-[![Импорт blueprint «оценка»](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Ffreemandigger%2Fha-mesh-passes%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fmesh_passes%2Fmark_notification.yaml)
+Аддон сам ничего не отправляет: он создаёт события в Home Assistant, а что и куда слать (Telegram, push в приложение, колонка), решают ваши автоматизации. Для них есть три готовых blueprint — импортируйте нужные кнопкой и создайте по ним автоматизации (Настройки → Автоматизации и сцены → Blueprints). В blueprint проходов и оценок готовый текст сообщения лежит в переменной `{{ message }}`.
 
-Пример: сообщение в тему Telegram-группы, когда ребёнок вышел из школы, — с оценками, выставленными за время в школе.
+| Blueprint | Когда срабатывает | Пример сообщения |
+|---|---|---|
+| **МЭШ: проход ребёнка**<br>[![Импорт blueprint «МЭШ: проход ребёнка»](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Ffreemandigger%2Fha-mesh-passes%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fmesh_passes%2Fpass_notification.yaml) | Ребёнок вошёл в школу или вышел из неё. К выходу добавляются оценки, выставленные, пока он был в школе. | 🏫 Иван: выход из школы в 14:40<br>Русский язык: 2 (Домашнее задание)<br>Математика: НВ → 4 (Цифровое домашнее задание) |
+| **МЭШ: оценка**<br>[![Импорт blueprint «МЭШ: оценка»](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Ffreemandigger%2Fha-mesh-passes%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fmesh_passes%2Fmark_notification.yaml) | Новая или исправленная оценка, когда ребёнок не в школе — например, учитель выставил её вечером или за прошлые дни. | 📘 Иван, Математика: 3 (Контрольная работа, за 16.09) |
+| **МЭШ: нужен вход / API не отвечает**<br>[![Импорт blueprint «МЭШ: нужен вход»](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Ffreemandigger%2Fha-mesh-passes%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fmesh_passes%2Fsession_alert.yaml) | Сессия mos.ru закончилась и нужно заново войти по QR в панели аддона, или API МЭШ долго не отвечает. | Нужно заново войти в МЭШ: откройте аддон «МЭШ: проходы» в Home Assistant. |
+
+Пример автоматизации на blueprint «МЭШ: проход ребёнка»: сообщение в тему Telegram-группы, когда ребёнок вышел из школы.
 
 ```yaml
 use_blueprint:
@@ -37,8 +41,6 @@ use_blueprint:
 ```
 
 Для `telegram_bot` в Home Assistant 2026.x адресат указывается через `chat_id` (параметр `target` устарел), а чат должен быть в списке разрешённых чатов бота — иначе сообщение молча уйдёт в чат по умолчанию.
-
-Оценки, выставленные вне школьного времени (в том числе поздние — за прошлые дни), присылает blueprint «МЭШ: оценка» — так же, через `{{ message }}`: «📘 Иван, Математика: 3 (Контрольная работа, за 16.09)».
 
 ## Без Home Assistant OS (Docker)
 
