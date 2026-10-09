@@ -9,7 +9,6 @@ arch:
   - amd64
 stage: experimental
 ingress: true
-ingress_port: 8099
 panel_icon: mdi:school
 panel_title: МЭШ
 services:
